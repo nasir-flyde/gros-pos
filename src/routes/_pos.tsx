@@ -70,9 +70,9 @@ function TopHeader() {
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        <div className="hidden text-right md:block">
-          <div className="text-lg font-bold leading-tight tabular-nums">{time}</div>
-          <div className="text-[11px] text-white/70">{date}</div>
+        <div className="hidden text-right md:block" suppressHydrationWarning>
+          <div className="text-lg font-bold leading-tight tabular-nums" suppressHydrationWarning>{time}</div>
+          <div className="text-[11px] text-white/70" suppressHydrationWarning>{date}</div>
         </div>
         <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white/15 text-sm font-bold">
           AM
