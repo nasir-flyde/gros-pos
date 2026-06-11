@@ -11,6 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PosRouteImport } from './routes/_pos'
 import { Route as PosIndexRouteImport } from './routes/_pos.index'
+import { Route as PosSuccessRouteImport } from './routes/_pos.success'
+import { Route as PosNewOrderRouteImport } from './routes/_pos.new-order'
+import { Route as PosCheckoutRouteImport } from './routes/_pos.checkout'
 
 const PosRoute = PosRouteImport.update({
   id: '/_pos',
@@ -21,24 +24,54 @@ const PosIndexRoute = PosIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PosRoute,
 } as any)
+const PosSuccessRoute = PosSuccessRouteImport.update({
+  id: '/success',
+  path: '/success',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosNewOrderRoute = PosNewOrderRouteImport.update({
+  id: '/new-order',
+  path: '/new-order',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosCheckoutRoute = PosCheckoutRouteImport.update({
+  id: '/checkout',
+  path: '/checkout',
+  getParentRoute: () => PosRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PosIndexRoute
+  '/checkout': typeof PosCheckoutRoute
+  '/new-order': typeof PosNewOrderRoute
+  '/success': typeof PosSuccessRoute
 }
 export interface FileRoutesByTo {
+  '/checkout': typeof PosCheckoutRoute
+  '/new-order': typeof PosNewOrderRoute
+  '/success': typeof PosSuccessRoute
   '/': typeof PosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_pos': typeof PosRouteWithChildren
+  '/_pos/checkout': typeof PosCheckoutRoute
+  '/_pos/new-order': typeof PosNewOrderRoute
+  '/_pos/success': typeof PosSuccessRoute
   '/_pos/': typeof PosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/checkout' | '/new-order' | '/success'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/_pos' | '/_pos/'
+  to: '/checkout' | '/new-order' | '/success' | '/'
+  id:
+    | '__root__'
+    | '/_pos'
+    | '/_pos/checkout'
+    | '/_pos/new-order'
+    | '/_pos/success'
+    | '/_pos/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -61,14 +94,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PosIndexRouteImport
       parentRoute: typeof PosRoute
     }
+    '/_pos/success': {
+      id: '/_pos/success'
+      path: '/success'
+      fullPath: '/success'
+      preLoaderRoute: typeof PosSuccessRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/new-order': {
+      id: '/_pos/new-order'
+      path: '/new-order'
+      fullPath: '/new-order'
+      preLoaderRoute: typeof PosNewOrderRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/checkout': {
+      id: '/_pos/checkout'
+      path: '/checkout'
+      fullPath: '/checkout'
+      preLoaderRoute: typeof PosCheckoutRouteImport
+      parentRoute: typeof PosRoute
+    }
   }
 }
 
 interface PosRouteChildren {
+  PosCheckoutRoute: typeof PosCheckoutRoute
+  PosNewOrderRoute: typeof PosNewOrderRoute
+  PosSuccessRoute: typeof PosSuccessRoute
   PosIndexRoute: typeof PosIndexRoute
 }
 
 const PosRouteChildren: PosRouteChildren = {
+  PosCheckoutRoute: PosCheckoutRoute,
+  PosNewOrderRoute: PosNewOrderRoute,
+  PosSuccessRoute: PosSuccessRoute,
   PosIndexRoute: PosIndexRoute,
 }
 
