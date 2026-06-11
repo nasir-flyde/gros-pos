@@ -17,6 +17,7 @@ import { Route as PosScannerRouteImport } from './routes/_pos.scanner'
 import { Route as PosReturnsRouteImport } from './routes/_pos.returns'
 import { Route as PosRequestStockRouteImport } from './routes/_pos.request-stock'
 import { Route as PosReportsRouteImport } from './routes/_pos.reports'
+import { Route as PosPurchaseRequestRouteImport } from './routes/_pos.purchase-request'
 import { Route as PosNewOrderRouteImport } from './routes/_pos.new-order'
 import { Route as PosInventoryRouteImport } from './routes/_pos.inventory'
 import { Route as PosHoldRouteImport } from './routes/_pos.hold'
@@ -64,6 +65,11 @@ const PosReportsRoute = PosReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => PosRoute,
 } as any)
+const PosPurchaseRequestRoute = PosPurchaseRequestRouteImport.update({
+  id: '/purchase-request',
+  path: '/purchase-request',
+  getParentRoute: () => PosRoute,
+} as any)
 const PosNewOrderRoute = PosNewOrderRouteImport.update({
   id: '/new-order',
   path: '/new-order',
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/hold': typeof PosHoldRoute
   '/inventory': typeof PosInventoryRoute
   '/new-order': typeof PosNewOrderRoute
+  '/purchase-request': typeof PosPurchaseRequestRoute
   '/reports': typeof PosReportsRoute
   '/request-stock': typeof PosRequestStockRoute
   '/returns': typeof PosReturnsRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/hold': typeof PosHoldRoute
   '/inventory': typeof PosInventoryRoute
   '/new-order': typeof PosNewOrderRoute
+  '/purchase-request': typeof PosPurchaseRequestRoute
   '/reports': typeof PosReportsRoute
   '/request-stock': typeof PosRequestStockRoute
   '/returns': typeof PosReturnsRoute
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/_pos/hold': typeof PosHoldRoute
   '/_pos/inventory': typeof PosInventoryRoute
   '/_pos/new-order': typeof PosNewOrderRoute
+  '/_pos/purchase-request': typeof PosPurchaseRequestRoute
   '/_pos/reports': typeof PosReportsRoute
   '/_pos/request-stock': typeof PosRequestStockRoute
   '/_pos/returns': typeof PosReturnsRoute
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/hold'
     | '/inventory'
     | '/new-order'
+    | '/purchase-request'
     | '/reports'
     | '/request-stock'
     | '/returns'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/hold'
     | '/inventory'
     | '/new-order'
+    | '/purchase-request'
     | '/reports'
     | '/request-stock'
     | '/returns'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/_pos/hold'
     | '/_pos/inventory'
     | '/_pos/new-order'
+    | '/_pos/purchase-request'
     | '/_pos/reports'
     | '/_pos/request-stock'
     | '/_pos/returns'
@@ -264,6 +276,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PosReportsRouteImport
       parentRoute: typeof PosRoute
     }
+    '/_pos/purchase-request': {
+      id: '/_pos/purchase-request'
+      path: '/purchase-request'
+      fullPath: '/purchase-request'
+      preLoaderRoute: typeof PosPurchaseRequestRouteImport
+      parentRoute: typeof PosRoute
+    }
     '/_pos/new-order': {
       id: '/_pos/new-order'
       path: '/new-order'
@@ -324,6 +343,7 @@ interface PosRouteChildren {
   PosHoldRoute: typeof PosHoldRoute
   PosInventoryRoute: typeof PosInventoryRoute
   PosNewOrderRoute: typeof PosNewOrderRoute
+  PosPurchaseRequestRoute: typeof PosPurchaseRequestRoute
   PosReportsRoute: typeof PosReportsRoute
   PosRequestStockRoute: typeof PosRequestStockRoute
   PosReturnsRoute: typeof PosReturnsRoute
@@ -341,6 +361,7 @@ const PosRouteChildren: PosRouteChildren = {
   PosHoldRoute: PosHoldRoute,
   PosInventoryRoute: PosInventoryRoute,
   PosNewOrderRoute: PosNewOrderRoute,
+  PosPurchaseRequestRoute: PosPurchaseRequestRoute,
   PosReportsRoute: PosReportsRoute,
   PosRequestStockRoute: PosRequestStockRoute,
   PosReturnsRoute: PosReturnsRoute,
