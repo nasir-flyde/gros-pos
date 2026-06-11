@@ -9,27 +9,74 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PosRouteImport } from './routes/_pos'
+import { Route as PosIndexRouteImport } from './routes/_pos.index'
 
-export interface FileRoutesByFullPath {}
-export interface FileRoutesByTo {}
+const PosRoute = PosRouteImport.update({
+  id: '/_pos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PosIndexRoute = PosIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PosRoute,
+} as any)
+
+export interface FileRoutesByFullPath {
+  '/': typeof PosIndexRoute
+}
+export interface FileRoutesByTo {
+  '/': typeof PosIndexRoute
+}
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/_pos': typeof PosRouteWithChildren
+  '/_pos/': typeof PosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: never
+  fullPaths: '/'
   fileRoutesByTo: FileRoutesByTo
-  to: never
-  id: '__root__'
+  to: '/'
+  id: '__root__' | '/_pos' | '/_pos/'
   fileRoutesById: FileRoutesById
 }
-export interface RootRouteChildren {}
-
-declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {}
+export interface RootRouteChildren {
+  PosRoute: typeof PosRouteWithChildren
 }
 
-const rootRouteChildren: RootRouteChildren = {}
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/_pos': {
+      id: '/_pos'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof PosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_pos/': {
+      id: '/_pos/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof PosIndexRouteImport
+      parentRoute: typeof PosRoute
+    }
+  }
+}
+
+interface PosRouteChildren {
+  PosIndexRoute: typeof PosIndexRoute
+}
+
+const PosRouteChildren: PosRouteChildren = {
+  PosIndexRoute: PosIndexRoute,
+}
+
+const PosRouteWithChildren = PosRoute._addFileChildren(PosRouteChildren)
+
+const rootRouteChildren: RootRouteChildren = {
+  PosRoute: PosRouteWithChildren,
+}
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
