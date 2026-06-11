@@ -14,6 +14,7 @@ import { Route as PosIndexRouteImport } from './routes/_pos.index'
 import { Route as PosSuccessRouteImport } from './routes/_pos.success'
 import { Route as PosScannerRouteImport } from './routes/_pos.scanner'
 import { Route as PosReturnsRouteImport } from './routes/_pos.returns'
+import { Route as PosRequestStockRouteImport } from './routes/_pos.request-stock'
 import { Route as PosReportsRouteImport } from './routes/_pos.reports'
 import { Route as PosNewOrderRouteImport } from './routes/_pos.new-order'
 import { Route as PosInventoryRouteImport } from './routes/_pos.inventory'
@@ -45,6 +46,11 @@ const PosScannerRoute = PosScannerRouteImport.update({
 const PosReturnsRoute = PosReturnsRouteImport.update({
   id: '/returns',
   path: '/returns',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosRequestStockRoute = PosRequestStockRouteImport.update({
+  id: '/request-stock',
+  path: '/request-stock',
   getParentRoute: () => PosRoute,
 } as any)
 const PosReportsRoute = PosReportsRouteImport.update({
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof PosInventoryRoute
   '/new-order': typeof PosNewOrderRoute
   '/reports': typeof PosReportsRoute
+  '/request-stock': typeof PosRequestStockRoute
   '/returns': typeof PosReturnsRoute
   '/scanner': typeof PosScannerRoute
   '/success': typeof PosSuccessRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof PosInventoryRoute
   '/new-order': typeof PosNewOrderRoute
   '/reports': typeof PosReportsRoute
+  '/request-stock': typeof PosRequestStockRoute
   '/returns': typeof PosReturnsRoute
   '/scanner': typeof PosScannerRoute
   '/success': typeof PosSuccessRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/_pos/inventory': typeof PosInventoryRoute
   '/_pos/new-order': typeof PosNewOrderRoute
   '/_pos/reports': typeof PosReportsRoute
+  '/_pos/request-stock': typeof PosRequestStockRoute
   '/_pos/returns': typeof PosReturnsRoute
   '/_pos/scanner': typeof PosScannerRoute
   '/_pos/success': typeof PosSuccessRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/new-order'
     | '/reports'
+    | '/request-stock'
     | '/returns'
     | '/scanner'
     | '/success'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/new-order'
     | '/reports'
+    | '/request-stock'
     | '/returns'
     | '/scanner'
     | '/success'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/_pos/inventory'
     | '/_pos/new-order'
     | '/_pos/reports'
+    | '/_pos/request-stock'
     | '/_pos/returns'
     | '/_pos/scanner'
     | '/_pos/success'
@@ -217,6 +229,13 @@ declare module '@tanstack/react-router' {
       path: '/returns'
       fullPath: '/returns'
       preLoaderRoute: typeof PosReturnsRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/request-stock': {
+      id: '/_pos/request-stock'
+      path: '/request-stock'
+      fullPath: '/request-stock'
+      preLoaderRoute: typeof PosRequestStockRouteImport
       parentRoute: typeof PosRoute
     }
     '/_pos/reports': {
@@ -287,6 +306,7 @@ interface PosRouteChildren {
   PosInventoryRoute: typeof PosInventoryRoute
   PosNewOrderRoute: typeof PosNewOrderRoute
   PosReportsRoute: typeof PosReportsRoute
+  PosRequestStockRoute: typeof PosRequestStockRoute
   PosReturnsRoute: typeof PosReturnsRoute
   PosScannerRoute: typeof PosScannerRoute
   PosSuccessRoute: typeof PosSuccessRoute
@@ -302,6 +322,7 @@ const PosRouteChildren: PosRouteChildren = {
   PosInventoryRoute: PosInventoryRoute,
   PosNewOrderRoute: PosNewOrderRoute,
   PosReportsRoute: PosReportsRoute,
+  PosRequestStockRoute: PosRequestStockRoute,
   PosReturnsRoute: PosReturnsRoute,
   PosScannerRoute: PosScannerRoute,
   PosSuccessRoute: PosSuccessRoute,
@@ -316,3 +337,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
