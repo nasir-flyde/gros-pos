@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PosRouteImport } from './routes/_pos'
 import { Route as PosIndexRouteImport } from './routes/_pos.index'
+import { Route as PosTransferStockRouteImport } from './routes/_pos.transfer-stock'
 import { Route as PosSuccessRouteImport } from './routes/_pos.success'
 import { Route as PosScannerRouteImport } from './routes/_pos.scanner'
 import { Route as PosReturnsRouteImport } from './routes/_pos.returns'
@@ -31,6 +32,11 @@ const PosRoute = PosRouteImport.update({
 const PosIndexRoute = PosIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosTransferStockRoute = PosTransferStockRouteImport.update({
+  id: '/transfer-stock',
+  path: '/transfer-stock',
   getParentRoute: () => PosRoute,
 } as any)
 const PosSuccessRoute = PosSuccessRouteImport.update({
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/returns': typeof PosReturnsRoute
   '/scanner': typeof PosScannerRoute
   '/success': typeof PosSuccessRoute
+  '/transfer-stock': typeof PosTransferStockRoute
 }
 export interface FileRoutesByTo {
   '/cash': typeof PosCashRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/returns': typeof PosReturnsRoute
   '/scanner': typeof PosScannerRoute
   '/success': typeof PosSuccessRoute
+  '/transfer-stock': typeof PosTransferStockRoute
   '/': typeof PosIndexRoute
 }
 export interface FileRoutesById {
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/_pos/returns': typeof PosReturnsRoute
   '/_pos/scanner': typeof PosScannerRoute
   '/_pos/success': typeof PosSuccessRoute
+  '/_pos/transfer-stock': typeof PosTransferStockRoute
   '/_pos/': typeof PosIndexRoute
 }
 export interface FileRouteTypes {
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/returns'
     | '/scanner'
     | '/success'
+    | '/transfer-stock'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/cash'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/returns'
     | '/scanner'
     | '/success'
+    | '/transfer-stock'
     | '/'
   id:
     | '__root__'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/_pos/returns'
     | '/_pos/scanner'
     | '/_pos/success'
+    | '/_pos/transfer-stock'
     | '/_pos/'
   fileRoutesById: FileRoutesById
 }
@@ -208,6 +220,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof PosIndexRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/transfer-stock': {
+      id: '/_pos/transfer-stock'
+      path: '/transfer-stock'
+      fullPath: '/transfer-stock'
+      preLoaderRoute: typeof PosTransferStockRouteImport
       parentRoute: typeof PosRoute
     }
     '/_pos/success': {
@@ -310,6 +329,7 @@ interface PosRouteChildren {
   PosReturnsRoute: typeof PosReturnsRoute
   PosScannerRoute: typeof PosScannerRoute
   PosSuccessRoute: typeof PosSuccessRoute
+  PosTransferStockRoute: typeof PosTransferStockRoute
   PosIndexRoute: typeof PosIndexRoute
 }
 
@@ -326,6 +346,7 @@ const PosRouteChildren: PosRouteChildren = {
   PosReturnsRoute: PosReturnsRoute,
   PosScannerRoute: PosScannerRoute,
   PosSuccessRoute: PosSuccessRoute,
+  PosTransferStockRoute: PosTransferStockRoute,
   PosIndexRoute: PosIndexRoute,
 }
 
