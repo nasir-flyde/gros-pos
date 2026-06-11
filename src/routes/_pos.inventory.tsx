@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { PRODUCTS, formatINR } from "@/lib/pos-data";
 import { TrendingUp, AlertTriangle, XCircle, Truck, ArrowLeftRight, FileText } from "lucide-react";
 
