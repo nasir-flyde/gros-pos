@@ -29,14 +29,15 @@ function InventoryPage() {
     </div>
   );
 }
-function Action({ icon: Icon, label, color }: { icon: typeof Truck; label: string; color: string }) {
+function Action({ icon: Icon, label, color, to }: { icon: typeof Truck; label: string; color: string; to: string }) {
   return (
-    <button
+    <Link
+      to={to}
       className="tap-target-lg flex items-center justify-center gap-2 rounded-2xl text-base font-extrabold text-white active:scale-[0.98]"
       style={{ backgroundColor: color }}
     >
       <Icon className="h-5 w-5" /> {label}
-    </button>
+    </Link>
   );
 }
 function Section({
