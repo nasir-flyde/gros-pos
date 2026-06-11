@@ -18,9 +18,9 @@ function InventoryPage() {
       <p className="text-sm font-semibold text-muted-foreground">Quick view · ST-018 Karol Bagh</p>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <Action color="var(--brand-blue)" icon={Truck} label="Request Stock" />
-        <Action color="var(--brand-orange)" icon={ArrowLeftRight} label="Transfer Stock" />
-        <Action color="var(--brand-green)" icon={FileText} label="Purchase Request" />
+        <Action to="/request-stock" color="var(--brand-blue)" icon={Truck} label="Request Stock" />
+        <Action to="/transfer-stock" color="var(--brand-orange)" icon={ArrowLeftRight} label="Transfer Stock" />
+        <Action to="/purchase-request" color="var(--brand-green)" icon={FileText} label="Purchase Request" />
       </div>
 
       <Section title="Out of Stock / Critical" icon={XCircle} accent="var(--brand-red)" items={out} />
