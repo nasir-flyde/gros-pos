@@ -1,3 +1,4 @@
+import { ClerkProvider } from "@clerk/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -78,7 +79,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "CHOTA BAZAAR POS — Sab Kuch. Kareeb Se." },
-      { name: "description", content: "Touch-first grocery POS for CHOTA BAZAAR stores. Fast billing, deliveries, returns, and store operations." },
+      {
+        name: "description",
+        content:
+          "Touch-first grocery POS for CHOTA BAZAAR stores. Fast billing, deliveries, returns, and store operations.",
+      },
       { name: "author", content: "CHOTA BAZAAR" },
       { property: "og:title", content: "CHOTA BAZAAR POS" },
       { property: "og:description", content: "Touch-first grocery POS for CHOTA BAZAAR stores." },
@@ -115,13 +120,21 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { AuthProvider } from "../components/auth-provider";
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-    </QueryClientProvider>
+    <ClerkProvider
+      publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ""}
+      afterSignOutUrl="/login"
+    >
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <Outlet />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ClerkProvider>
   );
 }

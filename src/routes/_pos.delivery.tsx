@@ -3,6 +3,9 @@ import { DELIVERY_QUEUE, RIDERS, formatINR } from "@/lib/pos-data";
 import { MapPin, Clock, Bike } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/delivery")({
+  validateSearch: (search: Record<string, string>) => ({
+    orderId: search.orderId || "",
+  }),
   head: () => ({ meta: [{ title: "Delivery Assignment — CHOTA BAZAAR POS" }] }),
   component: DeliveryPage,
 });
@@ -14,7 +17,10 @@ function DeliveryPage() {
       <section className="flex flex-col overflow-hidden">
         <div className="border-b bg-card px-5 py-3">
           <h1 className="text-2xl font-extrabold">Delivery Queue</h1>
-          <p className="text-sm font-semibold text-muted-foreground">{DELIVERY_QUEUE.filter(d => d.status === "unassigned").length} unassigned · {DELIVERY_QUEUE.filter(d => d.status === "assigned").length} assigned</p>
+          <p className="text-sm font-semibold text-muted-foreground">
+            {DELIVERY_QUEUE.filter((d) => d.status === "unassigned").length} unassigned ·{" "}
+            {DELIVERY_QUEUE.filter((d) => d.status === "assigned").length} assigned
+          </p>
         </div>
         <div className="flex-1 overflow-y-auto p-5">
           <div className="overflow-hidden rounded-2xl border-2 bg-card">
@@ -33,14 +39,18 @@ function DeliveryPage() {
                   <tr key={d.id} className="border-t">
                     <td className="px-4 py-3">
                       <div className="font-extrabold tabular-nums">{d.id}</div>
-                      <div className="text-xs font-semibold text-muted-foreground">{d.customer}</div>
+                      <div className="text-xs font-semibold text-muted-foreground">
+                        {d.customer}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 font-bold">
                         <MapPin className="h-4 w-4 text-[var(--brand-red)]" /> {d.area}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right font-extrabold tabular-nums">{formatINR(d.amount)}</td>
+                    <td className="px-4 py-3 text-right font-extrabold tabular-nums">
+                      {formatINR(d.amount)}
+                    </td>
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-1 text-sm font-bold">
                         <Clock className="h-4 w-4" /> {d.eta}
@@ -69,7 +79,9 @@ function DeliveryPage() {
       <aside className="flex flex-col overflow-hidden border-t-2 bg-card lg:border-l-2 lg:border-t-0">
         <div className="border-b px-5 py-3">
           <h2 className="text-lg font-extrabold">Available Riders</h2>
-          <p className="text-xs font-semibold text-muted-foreground">{RIDERS.filter((r) => r.available).length} of {RIDERS.length} online</p>
+          <p className="text-xs font-semibold text-muted-foreground">
+            {RIDERS.filter((r) => r.available).length} of {RIDERS.length} online
+          </p>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
           <ul className="space-y-2">

@@ -1,9 +1,6 @@
-import { createFileRoute, Outlet, Link, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { CartProvider } from "@/lib/cart-context";
-import {
-  Home, ShoppingCart, Users, Pause, RotateCcw, Bike, Wallet,
-  Package, BarChart3, ScanLine, Store, Clock,
-} from "lucide-react";
+import { Home, ShoppingCart, Users, ScanLine, Store, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/_pos")({
@@ -15,12 +12,6 @@ const NAV = [
   { to: "/new-order", label: "New Order", icon: ShoppingCart },
   { to: "/scanner", label: "Scan", icon: ScanLine },
   { to: "/customers", label: "Customers", icon: Users },
-  { to: "/hold", label: "Held", icon: Pause },
-  { to: "/returns", label: "Returns", icon: RotateCcw },
-  { to: "/delivery", label: "Delivery", icon: Bike },
-  { to: "/cash", label: "Cash", icon: Wallet },
-  { to: "/inventory", label: "Stock", icon: Package },
-  { to: "/reports", label: "Reports", icon: BarChart3 },
 ] as const;
 
 function PosLayout() {
@@ -39,14 +30,41 @@ function PosLayout() {
   );
 }
 
+import { useAuth } from "@clerk/react";
+import { useAuthStore } from "../lib/auth-store";
+import { LogOut } from "lucide-react";
+
 function TopHeader() {
   const [now, setNow] = useState(() => new Date());
+  const user = useAuthStore((state) => state.user);
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
-  const time = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
-  const date = now.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" });
+
+  const time = now.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const date = now.toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+
+  const handleLogout = () => {
+    signOut();
+    navigate({ to: "/login", replace: true });
+  };
+
+  const cashierName = user ? `${user.firstName} ${user.lastName}` : "Cashier Mode";
+  const initials = user ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase() : "CB";
+  const isSuperAdmin = user?.isSuperAdmin || false;
+  const storeScope = isSuperAdmin ? "Super Admin Access" : "Store Terminal Scope";
 
   return (
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 bg-[var(--brand-blue)] px-4 py-3 text-white sm:px-6">
@@ -57,26 +75,39 @@ function TopHeader() {
           </div>
           <div className="min-w-0">
             <div className="text-lg font-extrabold leading-tight tracking-tight">CHOTA BAZAAR</div>
-            <div className="text-[11px] font-medium leading-tight text-white/75">Sab Kuch. Kareeb Se.</div>
+            <div className="text-[11px] font-medium leading-tight text-white/75">
+              Sab Kuch. Kareeb Se.
+            </div>
           </div>
         </div>
         <div className="hidden h-10 w-px bg-white/20 md:block" />
         <div className="hidden min-w-0 md:block">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--brand-green)]" />
-            <span className="truncate">Karol Bagh Store · ST-018</span>
+            <span className="truncate">{storeScope}</span>
           </div>
-          <div className="text-xs text-white/70">Cashier: Anjali Mehta · Shift A (08:00–16:00)</div>
+          <div className="text-xs text-white/70">Cashier: {cashierName} · Online Session</div>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
         <div className="hidden text-right md:block" suppressHydrationWarning>
-          <div className="text-lg font-bold leading-tight tabular-nums" suppressHydrationWarning>{time}</div>
-          <div className="text-[11px] text-white/70" suppressHydrationWarning>{date}</div>
+          <div className="text-lg font-bold leading-tight tabular-nums" suppressHydrationWarning>
+            {time}
+          </div>
+          <div className="text-[11px] text-white/70" suppressHydrationWarning>
+            {date}
+          </div>
         </div>
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white/15 text-sm font-bold">
-          AM
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white/15 text-sm font-bold uppercase">
+          {initials}
         </div>
+        <button
+          onClick={handleLogout}
+          title="Sign Out"
+          className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-red-600/20 text-white hover:bg-red-600/40 transition-colors cursor-pointer"
+        >
+          <LogOut className="h-5 w-5" />
+        </button>
       </div>
     </header>
   );

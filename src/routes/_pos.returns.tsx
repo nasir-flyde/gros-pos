@@ -9,9 +9,23 @@ export const Route = createFileRoute("/_pos/returns")({
 });
 
 const MOCK_ITEMS = [
-  { id: "i1", name: "Amul Gold Milk 1L", qty: 2, price: 68, eligible: true, reason: "Damaged packaging" },
+  {
+    id: "i1",
+    name: "Amul Gold Milk 1L",
+    qty: 2,
+    price: 68,
+    eligible: true,
+    reason: "Damaged packaging",
+  },
   { id: "i2", name: "Britannia Bread 400g", qty: 1, price: 42, eligible: true, reason: "Expired" },
-  { id: "i3", name: "Lays Classic 52g", qty: 4, price: 20, eligible: false, reason: "Beyond return window" },
+  {
+    id: "i3",
+    name: "Lays Classic 52g",
+    qty: 4,
+    price: 20,
+    eligible: false,
+    reason: "Beyond return window",
+  },
 ];
 
 function ReturnsPage() {
@@ -21,7 +35,9 @@ function ReturnsPage() {
   return (
     <div className="h-full overflow-y-auto p-5">
       <h1 className="text-2xl font-extrabold">Returns & Refunds</h1>
-      <p className="text-sm font-semibold text-muted-foreground">Search a previous order to start a return</p>
+      <p className="text-sm font-semibold text-muted-foreground">
+        Search a previous order to start a return
+      </p>
 
       <div className="mt-4 flex max-w-2xl items-center gap-2 rounded-2xl border-2 border-[var(--brand-blue)]/30 bg-card px-4 py-3">
         <Search className="h-5 w-5 text-muted-foreground" />
@@ -31,15 +47,21 @@ function ReturnsPage() {
           placeholder="Order number or mobile number…"
           className="w-full bg-transparent text-lg font-bold focus:outline-none"
         />
-        <button className="tap-target rounded-xl bg-[var(--brand-blue)] px-5 font-extrabold text-white active:scale-95">Search</button>
+        <button className="tap-target rounded-xl bg-[var(--brand-blue)] px-5 font-extrabold text-white active:scale-95">
+          Search
+        </button>
       </div>
 
       <div className="mt-5 rounded-2xl border-2 bg-card p-4">
         <div className="flex items-center justify-between border-b pb-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Order CB-24187</div>
+            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Order CB-24187
+            </div>
             <div className="text-lg font-extrabold">Mohammed Aslam · 9818765432</div>
-            <div className="text-xs font-semibold text-muted-foreground">Purchased: Today, 12:31 PM</div>
+            <div className="text-xs font-semibold text-muted-foreground">
+              Purchased: Today, 12:31 PM
+            </div>
           </div>
           <span className="rounded-md bg-[var(--brand-green)]/15 px-3 py-1 text-sm font-extrabold text-[var(--brand-green)]">
             Eligible
@@ -55,7 +77,9 @@ function ReturnsPage() {
                   {it.qty} × {formatINR(it.price)} · Reason: {it.reason}
                 </div>
               </div>
-              <div className="text-base font-extrabold tabular-nums">{formatINR(it.qty * it.price)}</div>
+              <div className="text-base font-extrabold tabular-nums">
+                {formatINR(it.qty * it.price)}
+              </div>
               {it.eligible ? (
                 <span className="flex items-center gap-1 rounded-md bg-[var(--brand-green)]/15 px-2 py-1 text-xs font-bold text-[var(--brand-green)]">
                   <CheckCircle2 className="h-4 w-4" /> Refund

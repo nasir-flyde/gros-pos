@@ -19,17 +19,47 @@ function InventoryPage() {
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <Action to="/request-stock" color="var(--brand-blue)" icon={Truck} label="Request Stock" />
-        <Action to="/transfer-stock" color="var(--brand-orange)" icon={ArrowLeftRight} label="Transfer Stock" />
-        <Action to="/purchase-request" color="var(--brand-green)" icon={FileText} label="Purchase Request" />
+        <Action
+          to="/transfer-stock"
+          color="var(--brand-orange)"
+          icon={ArrowLeftRight}
+          label="Transfer Stock"
+        />
+        <Action
+          to="/purchase-request"
+          color="var(--brand-green)"
+          icon={FileText}
+          label="Purchase Request"
+        />
       </div>
 
-      <Section title="Out of Stock / Critical" icon={XCircle} accent="var(--brand-red)" items={out} />
+      <Section
+        title="Out of Stock / Critical"
+        icon={XCircle}
+        accent="var(--brand-red)"
+        items={out}
+      />
       <Section title="Low Stock" icon={AlertTriangle} accent="var(--brand-orange)" items={low} />
-      <Section title="Fast Moving Today" icon={TrendingUp} accent="var(--brand-green)" items={fast} />
+      <Section
+        title="Fast Moving Today"
+        icon={TrendingUp}
+        accent="var(--brand-green)"
+        items={fast}
+      />
     </div>
   );
 }
-function Action({ icon: Icon, label, color, to }: { icon: typeof Truck; label: string; color: string; to: string }) {
+function Action({
+  icon: Icon,
+  label,
+  color,
+  to,
+}: {
+  icon: typeof Truck;
+  label: string;
+  color: string;
+  to: string;
+}) {
   return (
     <Link
       to={to}
@@ -41,26 +71,46 @@ function Action({ icon: Icon, label, color, to }: { icon: typeof Truck; label: s
   );
 }
 function Section({
-  title, icon: Icon, accent, items,
-}: { title: string; icon: typeof TrendingUp; accent: string; items: typeof PRODUCTS }) {
+  title,
+  icon: Icon,
+  accent,
+  items,
+}: {
+  title: string;
+  icon: typeof TrendingUp;
+  accent: string;
+  items: typeof PRODUCTS;
+}) {
   return (
     <div className="mt-6">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide" style={{ color: accent }}>
+      <h2
+        className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide"
+        style={{ color: accent }}
+      >
         <Icon className="h-4 w-4" /> {title} · {items.length}
       </h2>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {items.map((p) => (
-          <div key={p.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border-2 bg-card p-3">
-            <div className="grid h-14 w-14 place-items-center rounded-xl bg-[var(--secondary)] text-3xl">{p.emoji}</div>
+          <div
+            key={p.id}
+            className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border-2 bg-card p-3"
+          >
+            <div className="grid h-14 w-14 place-items-center rounded-xl bg-[var(--secondary)] text-3xl">
+              {p.emoji}
+            </div>
             <div className="min-w-0">
               <div className="truncate font-extrabold leading-tight">{p.name}</div>
-              <div className="text-xs font-semibold text-muted-foreground">{p.weight} · {formatINR(p.price)}</div>
+              <div className="text-xs font-semibold text-muted-foreground">
+                {p.weight} · {formatINR(p.price)}
+              </div>
             </div>
             <div className="text-right">
               <div className="text-2xl font-extrabold tabular-nums" style={{ color: accent }}>
                 {p.stock}
               </div>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">units</div>
+              <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                units
+              </div>
             </div>
           </div>
         ))}

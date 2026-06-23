@@ -8,9 +8,18 @@ export const Route = createFileRoute("/_pos/reports")({
 });
 
 const HOURLY = [
-  { h: "08", s: 4200 }, { h: "09", s: 7800 }, { h: "10", s: 11200 }, { h: "11", s: 14800 },
-  { h: "12", s: 18600 }, { h: "13", s: 16200 }, { h: "14", s: 12400 }, { h: "15", s: 9800 },
-  { h: "16", s: 13200 }, { h: "17", s: 17400 }, { h: "18", s: 19800 }, { h: "19", s: 21200 },
+  { h: "08", s: 4200 },
+  { h: "09", s: 7800 },
+  { h: "10", s: 11200 },
+  { h: "11", s: 14800 },
+  { h: "12", s: 18600 },
+  { h: "13", s: 16200 },
+  { h: "14", s: 12400 },
+  { h: "15", s: 9800 },
+  { h: "16", s: 13200 },
+  { h: "17", s: 17400 },
+  { h: "18", s: 19800 },
+  { h: "19", s: 21200 },
 ];
 const CATS = [
   { name: "Fruits & Veg", v: 38200, c: "#5FAE3E" },
@@ -45,31 +54,50 @@ function ReportsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold">Daily Sales Report</h1>
-          <p className="text-sm font-semibold text-muted-foreground">Today · ST-018 Karol Bagh · Updated just now</p>
+          <p className="text-sm font-semibold text-muted-foreground">
+            Today · ST-018 Karol Bagh · Updated just now
+          </p>
         </div>
-        <button className="tap-target rounded-xl bg-[var(--brand-blue)] px-5 font-extrabold text-white active:scale-95">Export</button>
+        <button className="tap-target rounded-xl bg-[var(--brand-blue)] px-5 font-extrabold text-white active:scale-95">
+          Export
+        </button>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         {kpis.map((k) => (
           <div key={k.l} className="rounded-2xl border-2 bg-card p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{k.l}</div>
-            <div className="mt-1 text-2xl font-extrabold tabular-nums" style={{ color: k.c }}>{k.v}</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              {k.l}
+            </div>
+            <div className="mt-1 text-2xl font-extrabold tabular-nums" style={{ color: k.c }}>
+              {k.v}
+            </div>
           </div>
         ))}
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border-2 bg-card p-4">
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">Hourly Sales</h2>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+            Hourly Sales
+          </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={HOURLY}>
-                <XAxis dataKey="h" tick={{ fontSize: 12, fontWeight: 700 }} tickLine={false} axisLine={false} />
+                <XAxis
+                  dataKey="h"
+                  tick={{ fontSize: 12, fontWeight: 700 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
                 <YAxis hide />
                 <Tooltip
                   cursor={{ fill: "var(--secondary)" }}
-                  contentStyle={{ borderRadius: 12, border: "2px solid var(--border)", fontWeight: 700 }}
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "2px solid var(--border)",
+                    fontWeight: 700,
+                  }}
                   formatter={(v: number) => formatINR(v)}
                 />
                 <Bar dataKey="s" fill="var(--brand-blue)" radius={[6, 6, 0, 0]} />
@@ -79,19 +107,34 @@ function ReportsPage() {
         </div>
 
         <div className="rounded-2xl border-2 bg-card p-4">
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">Category Performance</h2>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+            Category Performance
+          </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={CATS} layout="vertical" margin={{ left: 80 }}>
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fontWeight: 700 }} tickLine={false} axisLine={false} width={100} />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  tick={{ fontSize: 11, fontWeight: 700 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={100}
+                />
                 <Tooltip
                   cursor={{ fill: "var(--secondary)" }}
-                  contentStyle={{ borderRadius: 12, border: "2px solid var(--border)", fontWeight: 700 }}
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "2px solid var(--border)",
+                    fontWeight: 700,
+                  }}
                   formatter={(v: number) => formatINR(v)}
                 />
                 <Bar dataKey="v" radius={[0, 6, 6, 0]}>
-                  {CATS.map((c, i) => <Cell key={i} fill={c.c} />)}
+                  {CATS.map((c, i) => (
+                    <Cell key={i} fill={c.c} />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -100,7 +143,9 @@ function ReportsPage() {
       </div>
 
       <div className="mt-4 rounded-2xl border-2 bg-card p-4">
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">Top Products</h2>
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+          Top Products
+        </h2>
         <table className="w-full text-left">
           <thead className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
             <tr>

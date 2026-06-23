@@ -1,8 +1,21 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useCart } from "@/lib/cart-context";
-import { formatINR } from "@/lib/pos-data";
-import { Banknote, Smartphone, CreditCard, Wallet, Split, Home, ShoppingBag, Footprints, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { useAuthStore } from "@/lib/auth-store";
+import { orderApi } from "@/lib/order-api";
+import { formatINR } from "@/lib/utils";
+import {
+  Banknote,
+  Smartphone,
+  CreditCard,
+  Wallet,
+  Split,
+  Home,
+  ArrowLeft,
+  Loader2,
+  AlertTriangle,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_pos/checkout")({
   head: () => ({ meta: [{ title: "Checkout — CHOTA BAZAAR POS" }] }),
@@ -10,24 +23,72 @@ export const Route = createFileRoute("/_pos/checkout")({
 });
 
 const PAYMENTS = [
-  { id: "Cash", label: "Cash", icon: Banknote, color: "var(--brand-green)" },
-  { id: "UPI", label: "UPI", icon: Smartphone, color: "var(--brand-blue)" },
-  { id: "Card", label: "Card", icon: CreditCard, color: "var(--brand-orange)" },
-  { id: "Wallet", label: "Wallet", icon: Wallet, color: "var(--brand-red)" },
-  { id: "Split", label: "Split", icon: Split, color: "var(--brand-blue)" },
-] as const;
-
-const DELIVERY = [
-  { id: "Home", label: "Home Delivery", sub: "Assign rider after checkout", icon: Home },
-  { id: "Pickup", label: "Store Pickup", sub: "Customer collects from counter", icon: ShoppingBag },
-  { id: "Walk-Out", label: "Walk-Out", sub: "Customer leaves with cart", icon: Footprints },
+  { id: "Cash" as const, label: "Cash", icon: Banknote, color: "var(--brand-green)" },
+  { id: "UPI" as const, label: "UPI", icon: Smartphone, color: "var(--brand-blue)" },
+  { id: "Card" as const, label: "Card", icon: CreditCard, color: "var(--brand-orange)" },
+  { id: "Wallet" as const, label: "Wallet", icon: Wallet, color: "var(--brand-red)" },
+  { id: "Split" as const, label: "Split", icon: Split, color: "var(--brand-blue)" },
 ] as const;
 
 function CheckoutPage() {
-  const { items, customer, subtotal, discount, delivery, tax, total, clear, setLastCheckout } = useCart();
+  const { items, customer, subtotal, discount, afterDisc, tax, clear, setLastCheckout } = useCart();
+  const authUser = useAuthStore((s) => s.user);
+  const scopes = useAuthStore((s) => s.scopes);
   const [payment, setPayment] = useState<(typeof PAYMENTS)[number]["id"]>("UPI");
-  const [deliveryMode, setDeliveryMode] = useState<(typeof DELIVERY)[number]["id"]>("Walk-Out");
+  const [homeDelivery, setHomeDelivery] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const storeId = scopes.find((s) => s.type === "store")?.id ?? "";
+  const cashierId = authUser?.id ?? "";
+  const noStore = !storeId;
+
+  const deliveryFee = homeDelivery ? (afterDisc > 500 ? 0 : 30) : 0;
+  const grandTotal = afterDisc + deliveryFee + tax;
+
+  const checkoutMutation = useMutation({
+    mutationFn: () => {
+      setCheckoutError(null);
+      if (noStore) throw new Error("No store assigned to your account. Contact admin.");
+      const payload = orderApi.buildPayload(
+        items,
+        payment,
+        homeDelivery ? "Home" : "Walk-Out",
+        storeId,
+        cashierId,
+        { delivery: deliveryFee, discount, grandTotal },
+        customer?._id,
+      );
+      return orderApi.checkout(payload);
+    },
+    onSuccess: (res) => {
+      const result = res.data;
+      setLastCheckout({
+        orderId: result.order.orderNumber,
+        payment,
+        delivery: homeDelivery ? "Home" : "Walk-Out",
+        total: grandTotal,
+        receiptData: result.receipt as Record<string, unknown>,
+        customer: customer
+          ? { _id: customer._id, name: customer.name, mobile: customer.mobile, area: customer.area }
+          : null,
+      });
+      clear();
+      navigate({ to: "/success" });
+    },
+    onError: (err: unknown) => {
+      const e = err as {
+        message?: string;
+        details?: { fields?: Array<{ field: string; message: string }> };
+      };
+      if (e?.details?.fields?.length) {
+        const items = e.details.fields.map((f) => `• ${f.field}: ${f.message}`);
+        setCheckoutError(items.join("\n"));
+      } else {
+        setCheckoutError(e?.message || "Checkout failed. Please try again.");
+      }
+    },
+  });
 
   if (items.length === 0) {
     return (
@@ -35,7 +96,10 @@ function CheckoutPage() {
         <div>
           <div className="text-6xl">🛒</div>
           <div className="mt-3 text-xl font-bold">Cart is empty</div>
-          <Link to="/new-order" className="mt-4 inline-flex tap-target items-center rounded-xl bg-[var(--brand-blue)] px-5 font-bold text-white">
+          <Link
+            to="/new-order"
+            className="mt-4 inline-flex tap-target items-center rounded-xl bg-[var(--brand-blue)] px-5 font-bold text-white"
+          >
             Start New Order
           </Link>
         </div>
@@ -43,50 +107,89 @@ function CheckoutPage() {
     );
   }
 
-  const placeOrder = () => {
-    const orderId = "CB-" + Math.floor(24000 + Math.random() * 999);
-    setLastCheckout({
-      orderId, payment, delivery: deliveryMode, total, customer,
-    });
-    clear();
-    navigate({ to: "/success" });
-  };
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex items-center gap-3 border-b bg-card px-4 py-3">
-        <Link to="/new-order" className="tap-target grid place-items-center rounded-xl bg-[var(--secondary)] px-3 font-bold active:scale-95">
+        <Link
+          to="/new-order"
+          className="tap-target grid place-items-center rounded-xl bg-[var(--secondary)] px-3 font-bold active:scale-95"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
           <h1 className="text-xl font-extrabold leading-tight">Checkout</h1>
-          <p className="text-xs font-medium text-muted-foreground">Confirm payment and delivery to finalize</p>
+          <p className="text-xs font-medium text-muted-foreground">Confirm payment to finalize</p>
         </div>
       </div>
 
       <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_400px]">
         <div className="overflow-y-auto p-5">
-          {/* Customer */}
           <Section title="Customer">
             <div className="flex items-center justify-between rounded-xl border-2 bg-card p-4">
               <div className="flex items-center gap-3">
                 <div className="grid h-12 w-12 place-items-center rounded-xl bg-[var(--brand-blue)] text-base font-extrabold text-white">
-                  {customer ? customer.name.split(" ").map((n) => n[0]).join("").slice(0, 2) : "WI"}
+                  {customer
+                    ? customer.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")
+                        .slice(0, 2)
+                    : "WI"}
                 </div>
                 <div>
-                  <div className="text-base font-extrabold">{customer ? customer.name : "Walk-in Customer"}</div>
+                  <div className="text-base font-extrabold">
+                    {customer ? customer.name : "Walk-in Customer"}
+                  </div>
                   <div className="text-xs font-semibold text-muted-foreground">
                     {customer ? `${customer.mobile} · ${customer.area}` : "No customer attached"}
                   </div>
                 </div>
               </div>
-              <Link to="/customers" className="tap-target rounded-xl bg-[var(--secondary)] px-4 font-bold active:scale-95">
+              <Link
+                to="/customers"
+                className="tap-target rounded-xl bg-[var(--secondary)] px-4 font-bold active:scale-95"
+              >
                 {customer ? "Change" : "Add"}
               </Link>
             </div>
+            {customer && (
+              <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border-2 bg-card p-4 transition-all active:scale-[0.99]">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--secondary)]">
+                    <Home className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-extrabold">Home Delivery</div>
+                    <div className="text-xs font-medium text-muted-foreground">
+                      {homeDelivery
+                        ? deliveryFee === 0
+                          ? "Free delivery"
+                          : `₹30 delivery fee`
+                        : "Add delivery"}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setHomeDelivery(!homeDelivery);
+                  }}
+                  className={
+                    "relative h-7 w-12 shrink-0 rounded-full transition-colors " +
+                    (homeDelivery ? "bg-[var(--brand-blue)]" : "bg-muted-foreground/30")
+                  }
+                >
+                  <div
+                    className={
+                      "absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform " +
+                      (homeDelivery ? "translate-x-5" : "translate-x-0")
+                    }
+                  />
+                </div>
+              </label>
+            )}
           </Section>
 
-          {/* Payment */}
           <Section title="Payment Method">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
               {PAYMENTS.map((p) => {
@@ -111,79 +214,60 @@ function CheckoutPage() {
               })}
             </div>
           </Section>
-
-          {/* Delivery */}
-          <Section title="Delivery Type">
-            <div className="grid gap-3 md:grid-cols-3">
-              {DELIVERY.map((d) => {
-                const Icon = d.icon;
-                const active = deliveryMode === d.id;
-                return (
-                  <button
-                    key={d.id}
-                    onClick={() => setDeliveryMode(d.id)}
-                    className={
-                      "tap-target-lg flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition-all active:scale-[0.98] " +
-                      (active
-                        ? "border-[var(--brand-blue)] bg-[var(--brand-blue)] text-white"
-                        : "border-border bg-card")
-                    }
-                  >
-                    <div
-                      className={
-                        "grid h-12 w-12 shrink-0 place-items-center rounded-xl " +
-                        (active ? "bg-white/20" : "bg-[var(--secondary)]")
-                      }
-                    >
-                      <Icon className="h-6 w-6" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-extrabold leading-tight">{d.label}</div>
-                      <div className={"text-xs font-medium " + (active ? "text-white/80" : "text-muted-foreground")}>
-                        {d.sub}
-                      </div>
-                    </div>
-                    {active && <CheckCircle2 className="ml-auto h-6 w-6 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </Section>
         </div>
 
-        {/* Summary side panel */}
         <aside className="flex flex-col overflow-hidden border-t-2 bg-card lg:border-l-2 lg:border-t-0">
           <div className="flex-1 overflow-y-auto p-5">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Order Summary</h3>
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+              Order Summary
+            </h3>
             <ul className="space-y-2 text-sm">
               {items.map((i) => (
-                <li key={i.product.id} className="flex items-start justify-between gap-3">
+                <li key={i.product._id} className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-bold">{i.product.name}</div>
                     <div className="text-xs text-muted-foreground">
                       {i.qty} × {formatINR(i.product.price)}
                     </div>
                   </div>
-                  <div className="font-extrabold tabular-nums">{formatINR(i.product.price * i.qty)}</div>
+                  <div className="font-extrabold tabular-nums">
+                    {formatINR(i.product.price * i.qty)}
+                  </div>
                 </li>
               ))}
             </ul>
             <div className="mt-4 space-y-1 border-t pt-3 text-sm">
               <SumRow label="Subtotal (MRP)" value={formatINR(subtotal)} />
               <SumRow label="Discount" value={"– " + formatINR(discount)} positive />
-              <SumRow label="Delivery" value={delivery === 0 ? "FREE" : formatINR(delivery)} />
-              <SumRow label="GST (5%)" value={formatINR(tax)} />
+              {homeDelivery && (
+                <SumRow
+                  label="Delivery"
+                  value={deliveryFee === 0 ? "FREE" : formatINR(deliveryFee)}
+                />
+              )}
+              <SumRow label="GST" value={formatINR(tax)} />
             </div>
             <div className="mt-3 flex items-end justify-between border-t pt-3">
               <span className="text-sm font-bold uppercase tracking-wide">Grand Total</span>
-              <span className="text-3xl font-extrabold tabular-nums">{formatINR(total)}</span>
+              <span className="text-3xl font-extrabold tabular-nums">{formatINR(grandTotal)}</span>
             </div>
           </div>
+          {checkoutError && (
+            <div className="mx-3 flex items-start gap-2 rounded-xl border-2 border-[var(--brand-red)]/30 bg-[var(--brand-red)]/5 p-3 text-sm font-semibold text-[var(--brand-red)]">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="whitespace-pre-line">{checkoutError}</span>
+            </div>
+          )}
           <button
-            onClick={placeOrder}
-            className="m-3 flex min-h-[88px] items-center justify-center gap-3 rounded-2xl bg-[var(--brand-green)] text-xl font-extrabold text-white shadow-lg active:scale-[0.98]"
+            onClick={() => checkoutMutation.mutate()}
+            disabled={checkoutMutation.isPending}
+            className="m-3 flex min-h-[88px] items-center justify-center gap-3 rounded-2xl bg-[var(--brand-green)] text-xl font-extrabold text-white shadow-lg disabled:opacity-60 active:scale-[0.98]"
           >
-            PLACE ORDER · {formatINR(total)}
+            {checkoutMutation.isPending ? (
+              <Loader2 className="h-7 w-7 animate-spin" />
+            ) : (
+              <>PLACE ORDER · {formatINR(grandTotal)}</>
+            )}
           </button>
         </aside>
       </div>
@@ -194,16 +278,21 @@ function CheckoutPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-6">
-      <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">{title}</h2>
+      <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h2>
       {children}
     </div>
   );
 }
+
 function SumRow({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between py-0.5">
       <span className="font-semibold text-muted-foreground">{label}</span>
-      <span className={"font-bold tabular-nums " + (positive ? "text-[var(--brand-green)]" : "")}>{value}</span>
+      <span className={"font-bold tabular-nums " + (positive ? "text-[var(--brand-green)]" : "")}>
+        {value}
+      </span>
     </div>
   );
 }

@@ -9,6 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as PosRouteImport } from './routes/_pos'
 import { Route as PosIndexRouteImport } from './routes/_pos.index'
 import { Route as PosTransferStockRouteImport } from './routes/_pos.transfer-stock'
@@ -26,6 +28,16 @@ import { Route as PosCustomersRouteImport } from './routes/_pos.customers'
 import { Route as PosCheckoutRouteImport } from './routes/_pos.checkout'
 import { Route as PosCashRouteImport } from './routes/_pos.cash'
 
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChangePasswordRoute = ChangePasswordRouteImport.update({
+  id: '/change-password',
+  path: '/change-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PosRoute = PosRouteImport.update({
   id: '/_pos',
   getParentRoute: () => rootRouteImport,
@@ -108,6 +120,8 @@ const PosCashRoute = PosCashRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof PosIndexRoute
+  '/change-password': typeof ChangePasswordRoute
+  '/login': typeof LoginRoute
   '/cash': typeof PosCashRoute
   '/checkout': typeof PosCheckoutRoute
   '/customers': typeof PosCustomersRoute
@@ -124,6 +138,8 @@ export interface FileRoutesByFullPath {
   '/transfer-stock': typeof PosTransferStockRoute
 }
 export interface FileRoutesByTo {
+  '/change-password': typeof ChangePasswordRoute
+  '/login': typeof LoginRoute
   '/cash': typeof PosCashRoute
   '/checkout': typeof PosCheckoutRoute
   '/customers': typeof PosCustomersRoute
@@ -143,6 +159,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_pos': typeof PosRouteWithChildren
+  '/change-password': typeof ChangePasswordRoute
+  '/login': typeof LoginRoute
   '/_pos/cash': typeof PosCashRoute
   '/_pos/checkout': typeof PosCheckoutRoute
   '/_pos/customers': typeof PosCustomersRoute
@@ -163,6 +181,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/change-password'
+    | '/login'
     | '/cash'
     | '/checkout'
     | '/customers'
@@ -179,6 +199,8 @@ export interface FileRouteTypes {
     | '/transfer-stock'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/change-password'
+    | '/login'
     | '/cash'
     | '/checkout'
     | '/customers'
@@ -197,6 +219,8 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_pos'
+    | '/change-password'
+    | '/login'
     | '/_pos/cash'
     | '/_pos/checkout'
     | '/_pos/customers'
@@ -216,10 +240,26 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   PosRoute: typeof PosRouteWithChildren
+  ChangePasswordRoute: typeof ChangePasswordRoute
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/change-password': {
+      id: '/change-password'
+      path: '/change-password'
+      fullPath: '/change-password'
+      preLoaderRoute: typeof ChangePasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_pos': {
       id: '/_pos'
       path: ''
@@ -375,7 +415,19 @@ const PosRouteWithChildren = PosRoute._addFileChildren(PosRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   PosRoute: PosRouteWithChildren,
+  ChangePasswordRoute: ChangePasswordRoute,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

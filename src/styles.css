@@ -49,40 +49,40 @@
 
 :root {
   /* Brand */
-  --brand-blue: #052B7B;
-  --brand-red: #E1261C;
-  --brand-orange: #FF7A00;
-  --brand-green: #5FAE3E;
-  --brand-yellow: #FFC928;
+  --brand-blue: #052b7b;
+  --brand-red: #e1261c;
+  --brand-orange: #ff7a00;
+  --brand-green: #5fae3e;
+  --brand-yellow: #ffc928;
 
-  --background: #F7F5F0;
-  --surface: #FFFFFF;
-  --foreground: #1C1C1C;
-  --ink: #1C1C1C;
+  --background: #f7f5f0;
+  --surface: #ffffff;
+  --foreground: #1c1c1c;
+  --ink: #1c1c1c;
 
-  --card: #FFFFFF;
-  --card-foreground: #1C1C1C;
-  --popover: #FFFFFF;
-  --popover-foreground: #1C1C1C;
+  --card: #ffffff;
+  --card-foreground: #1c1c1c;
+  --popover: #ffffff;
+  --popover-foreground: #1c1c1c;
 
-  --primary: #052B7B;
-  --primary-foreground: #FFFFFF;
+  --primary: #052b7b;
+  --primary-foreground: #ffffff;
 
-  --secondary: #F1EEE7;
-  --secondary-foreground: #1C1C1C;
+  --secondary: #f1eee7;
+  --secondary-foreground: #1c1c1c;
 
-  --muted: #F1EEE7;
-  --muted-foreground: #5C5C5C;
+  --muted: #f1eee7;
+  --muted-foreground: #5c5c5c;
 
-  --accent: #FF7A00;
-  --accent-foreground: #FFFFFF;
+  --accent: #ff7a00;
+  --accent-foreground: #ffffff;
 
-  --destructive: #E1261C;
-  --destructive-foreground: #FFFFFF;
+  --destructive: #e1261c;
+  --destructive-foreground: #ffffff;
 
-  --border: #E5E5E5;
-  --input: #E5E5E5;
-  --ring: #052B7B;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #052b7b;
 }
 
 .dark {
@@ -93,7 +93,8 @@
   * {
     border-color: var(--color-border);
   }
-  html, body {
+  html,
+  body {
     font-family: var(--font-sans);
     background-color: var(--color-background);
     color: var(--color-foreground);
@@ -105,12 +106,15 @@
     -webkit-user-select: none;
     user-select: none;
   }
-  input, textarea {
+  input,
+  textarea {
     -webkit-user-select: text;
     user-select: text;
   }
   /* Larger default tap targets on all interactive elements */
-  button, [role="button"], a {
+  button,
+  [role="button"],
+  a {
     touch-action: manipulation;
   }
 }
@@ -127,4 +131,40 @@
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* ── Print Styles for Receipt ─────────────────────────────────── */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #receipt-print,
+  #receipt-print * {
+    visibility: visible;
+  }
+  #receipt-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    padding: 0;
+    margin: 0;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    font-family: "Courier New", "Consolas", monospace !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    color: #000 !important;
+    background: #fff !important;
+  }
+  #receipt-print .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes scanline {
+  0%   { top: 0%; opacity: 1; }
+  50%  { top: calc(100% - 2px); opacity: 1; }
+  100% { top: 0%; opacity: 1; }
 }

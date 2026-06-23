@@ -2,8 +2,20 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PRODUCTS, formatINR } from "@/lib/pos-data";
 import { useMemo, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, Search, Plus, Minus, Trash2, Truck,
-  Save, FileText, CheckCircle2, Send, Package, Scale, Box,
+  ArrowLeft,
+  ArrowRight,
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  Truck,
+  Save,
+  FileText,
+  CheckCircle2,
+  Send,
+  Package,
+  Scale,
+  Box,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/transfer-stock")({
@@ -19,7 +31,13 @@ const STORES = [
   { id: "ST-044", name: "CB Saket", area: "Delhi" },
 ];
 
-const REASONS = ["Low Stock", "Emergency Refill", "Inventory Balancing", "Promotion Support", "Seasonal Demand"];
+const REASONS = [
+  "Low Stock",
+  "Emergency Refill",
+  "Inventory Balancing",
+  "Promotion Support",
+  "Seasonal Demand",
+];
 
 type CartItem = { id: string; qty: number };
 
@@ -37,14 +55,15 @@ function TransferStockPage() {
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return PRODUCTS.filter(p =>
-      (cat === "all" || p.category === cat) &&
-      (q === "" || p.name.toLowerCase().includes(q) || p.brand?.toLowerCase().includes(q))
+    return PRODUCTS.filter(
+      (p) =>
+        (cat === "all" || p.category === cat) &&
+        (q === "" || p.name.toLowerCase().includes(q) || p.brand?.toLowerCase().includes(q)),
     );
   }, [query, cat]);
 
-  const cartDetailed = cart.map(c => {
-    const p = PRODUCTS.find(x => x.id === c.id)!;
+  const cartDetailed = cart.map((c) => {
+    const p = PRODUCTS.find((x) => x.id === c.id)!;
     return { ...c, product: p, value: c.qty * p.price };
   });
 
@@ -54,47 +73,84 @@ function TransferStockPage() {
   const totalVolume = totalUnits * 0.0012;
 
   const addToCart = (id: string, n: number = 1) => {
-    setCart(c => {
-      const ex = c.find(x => x.id === id);
-      if (ex) return c.map(x => x.id === id ? { ...x, qty: x.qty + n } : x);
+    setCart((c) => {
+      const ex = c.find((x) => x.id === id);
+      if (ex) return c.map((x) => (x.id === id ? { ...x, qty: x.qty + n } : x));
       return [...c, { id, qty: n }];
     });
   };
   const setQty = (id: string, q: number) =>
-    setCart(c => q <= 0 ? c.filter(x => x.id !== id) : c.map(x => x.id === id ? { ...x, qty: q } : x));
+    setCart((c) =>
+      q <= 0 ? c.filter((x) => x.id !== id) : c.map((x) => (x.id === id ? { ...x, qty: q } : x)),
+    );
 
-  const cats = [{ id: "all", name: "All", emoji: "🛒" }, ...Array.from(new Set(PRODUCTS.map(p => p.category))).map(c => ({ id: c, name: c, emoji: PRODUCTS.find(p => p.category === c)?.emoji ?? "📦" }))];
+  const cats = [
+    { id: "all", name: "All", emoji: "🛒" },
+    ...Array.from(new Set(PRODUCTS.map((p) => p.category))).map((c) => ({
+      id: c,
+      name: c,
+      emoji: PRODUCTS.find((p) => p.category === c)?.emoji ?? "📦",
+    })),
+  ];
 
-  const srcStore = STORES.find(s => s.id === source)!;
-  const destStore = STORES.find(s => s.id === dest)!;
+  const srcStore = STORES.find((s) => s.id === source)!;
+  const destStore = STORES.find((s) => s.id === dest)!;
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="border-b-2 bg-[var(--surface)] px-5 py-3">
         <div className="flex items-center gap-3">
-          <Link to="/inventory" className="tap-target grid place-items-center rounded-xl border-2 bg-white px-3">
+          <Link
+            to="/inventory"
+            className="tap-target grid place-items-center rounded-xl border-2 bg-white px-3"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="flex-1">
             <h1 className="text-xl font-extrabold leading-tight">Transfer Stock</h1>
-            <div className="text-xs font-semibold text-muted-foreground">TRN-2026-00942 · Draft · Created by Rajesh K. · {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</div>
+            <div className="text-xs font-semibold text-muted-foreground">
+              TRN-2026-00942 · Draft · Created by Rajesh K. ·{" "}
+              {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+            </div>
           </div>
-          <span className="rounded-xl bg-[var(--brand-yellow)] px-3 py-1.5 text-xs font-extrabold uppercase text-[var(--brand-blue)]">Draft</span>
+          <span className="rounded-xl bg-[var(--brand-yellow)] px-3 py-1.5 text-xs font-extrabold uppercase text-[var(--brand-blue)]">
+            Draft
+          </span>
         </div>
 
         {/* Source / Dest / Reason */}
         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_1fr_2fr]">
-          <StoreSelect label="Source Store" value={source} onChange={setSource} accent="var(--brand-blue)" />
-          <div className="grid place-items-center"><ArrowRight className="h-7 w-7 text-[var(--brand-orange)]" /></div>
-          <StoreSelect label="Destination Store" value={dest} onChange={setDest} accent="var(--brand-orange)" />
+          <StoreSelect
+            label="Source Store"
+            value={source}
+            onChange={setSource}
+            accent="var(--brand-blue)"
+          />
+          <div className="grid place-items-center">
+            <ArrowRight className="h-7 w-7 text-[var(--brand-orange)]" />
+          </div>
+          <StoreSelect
+            label="Destination Store"
+            value={dest}
+            onChange={setDest}
+            accent="var(--brand-orange)"
+          />
           <div>
-            <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Transfer Reason</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+              Transfer Reason
+            </div>
             <div className="mt-1 flex flex-wrap gap-1.5">
-              {REASONS.map(r => (
-                <button key={r} onClick={() => setReason(r)}
+              {REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setReason(r)}
                   className="h-12 rounded-xl px-3 text-xs font-extrabold transition-colors"
-                  style={{ backgroundColor: reason === r ? "var(--brand-blue)" : "var(--secondary)", color: reason === r ? "#fff" : "var(--ink)" }}>
+                  style={{
+                    backgroundColor: reason === r ? "var(--brand-blue)" : "var(--secondary)",
+                    color: reason === r ? "#fff" : "var(--ink)",
+                  }}
+                >
                   {r}
                 </button>
               ))}
@@ -110,16 +166,25 @@ function TransferStockPage() {
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                <input value={query} onChange={(e) => setQuery(e.target.value)}
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search product, brand, barcode…"
-                  className="tap-target w-full rounded-xl border-2 bg-white pl-11 pr-3 text-base font-semibold outline-none focus:border-[var(--brand-blue)]" />
+                  className="tap-target w-full rounded-xl border-2 bg-white pl-11 pr-3 text-base font-semibold outline-none focus:border-[var(--brand-blue)]"
+                />
               </div>
             </div>
             <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
-              {cats.map(c => (
-                <button key={c.id} onClick={() => setCat(c.id)}
+              {cats.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCat(c.id)}
                   className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-extrabold capitalize"
-                  style={{ backgroundColor: cat === c.id ? "var(--brand-blue)" : "var(--secondary)", color: cat === c.id ? "#fff" : "var(--ink)" }}>
+                  style={{
+                    backgroundColor: cat === c.id ? "var(--brand-blue)" : "var(--secondary)",
+                    color: cat === c.id ? "#fff" : "var(--ink)",
+                  }}
+                >
                   <span className="text-base">{c.emoji}</span> {c.name.replace("-", " & ")}
                 </button>
               ))}
@@ -131,32 +196,49 @@ function TransferStockPage() {
               {srcStore.name} · Available Stock · {filtered.length} SKUs
             </div>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {filtered.map(p => {
+              {filtered.map((p) => {
                 const reserved = Math.min(p.stock, Math.floor(p.stock * 0.15));
                 const transferable = p.stock - reserved;
                 return (
                   <div key={p.id} className="rounded-2xl border-2 bg-white p-2.5">
                     <div className="flex gap-2">
-                      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-[var(--secondary)] text-2xl">{p.emoji}</div>
+                      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-[var(--secondary)] text-2xl">
+                        {p.emoji}
+                      </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-extrabold leading-tight">{p.name}</div>
-                        <div className="text-[11px] font-semibold text-muted-foreground">{p.weight} · {formatINR(p.price)}</div>
+                        <div className="truncate text-sm font-extrabold leading-tight">
+                          {p.name}
+                        </div>
+                        <div className="text-[11px] font-semibold text-muted-foreground">
+                          {p.weight} · {formatINR(p.price)}
+                        </div>
                         <div className="mt-1 flex gap-2 text-[10px] font-bold">
-                          <span className="rounded-md bg-[var(--brand-green)]/15 px-1.5 py-0.5 text-[var(--brand-green)]">AVL {p.stock}</span>
-                          <span className="rounded-md bg-[var(--brand-orange)]/15 px-1.5 py-0.5 text-[var(--brand-orange)]">RSV {reserved}</span>
-                          <span className="rounded-md bg-[var(--brand-blue)]/15 px-1.5 py-0.5 text-[var(--brand-blue)]">TRN {transferable}</span>
+                          <span className="rounded-md bg-[var(--brand-green)]/15 px-1.5 py-0.5 text-[var(--brand-green)]">
+                            AVL {p.stock}
+                          </span>
+                          <span className="rounded-md bg-[var(--brand-orange)]/15 px-1.5 py-0.5 text-[var(--brand-orange)]">
+                            RSV {reserved}
+                          </span>
+                          <span className="rounded-md bg-[var(--brand-blue)]/15 px-1.5 py-0.5 text-[var(--brand-blue)]">
+                            TRN {transferable}
+                          </span>
                         </div>
                       </div>
                     </div>
                     <div className="mt-2 flex items-center gap-1">
-                      {[1, 5, 10, 25].map(n => (
-                        <button key={n} onClick={() => addToCart(p.id, n)}
-                          className="h-11 flex-1 rounded-lg bg-[var(--secondary)] text-xs font-extrabold active:bg-[var(--brand-blue)] active:text-white">
+                      {[1, 5, 10, 25].map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => addToCart(p.id, n)}
+                          className="h-11 flex-1 rounded-lg bg-[var(--secondary)] text-xs font-extrabold active:bg-[var(--brand-blue)] active:text-white"
+                        >
                           +{n}
                         </button>
                       ))}
-                      <button onClick={() => addToCart(p.id, 1)}
-                        className="h-11 rounded-lg bg-[var(--brand-blue)] px-3 text-xs font-extrabold text-white">
+                      <button
+                        onClick={() => addToCart(p.id, 1)}
+                        className="h-11 rounded-lg bg-[var(--brand-blue)] px-3 text-xs font-extrabold text-white"
+                      >
                         Add
                       </button>
                     </div>
@@ -170,12 +252,16 @@ function TransferStockPage() {
         {/* Cart */}
         <aside className="flex flex-col overflow-hidden bg-[var(--surface)]">
           <div className="border-b bg-[var(--brand-blue)] px-4 py-3 text-white">
-            <div className="text-[10px] font-extrabold uppercase tracking-wider opacity-70">Transfer Cart</div>
+            <div className="text-[10px] font-extrabold uppercase tracking-wider opacity-70">
+              Transfer Cart
+            </div>
             <div className="flex items-baseline justify-between">
               <div className="text-lg font-extrabold">{cart.length} products</div>
               <div className="text-2xl font-extrabold tabular-nums">{formatINR(totalValue)}</div>
             </div>
-            <div className="mt-1 text-xs font-semibold opacity-80">→ {destStore.name} · {destStore.area}</div>
+            <div className="mt-1 text-xs font-semibold opacity-80">
+              → {destStore.name} · {destStore.area}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-3">
@@ -184,24 +270,39 @@ function TransferStockPage() {
                 Tap products to add to transfer
               </div>
             )}
-            {cartDetailed.map(c => (
+            {cartDetailed.map((c) => (
               <div key={c.id} className="mb-2 rounded-2xl border-2 bg-white p-2.5">
                 <div className="flex gap-2">
-                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[var(--secondary)] text-2xl">{c.product.emoji}</div>
+                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[var(--secondary)] text-2xl">
+                    {c.product.emoji}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-extrabold">{c.product.name}</div>
-                    <div className="text-[11px] font-semibold text-muted-foreground">{formatINR(c.value)} · {c.product.weight}</div>
+                    <div className="text-[11px] font-semibold text-muted-foreground">
+                      {formatINR(c.value)} · {c.product.weight}
+                    </div>
                   </div>
-                  <button onClick={() => setQty(c.id, 0)} className="grid h-10 w-10 place-items-center rounded-lg text-[var(--brand-red)] active:bg-[var(--brand-red)]/10">
+                  <button
+                    onClick={() => setQty(c.id, 0)}
+                    className="grid h-10 w-10 place-items-center rounded-lg text-[var(--brand-red)] active:bg-[var(--brand-red)]/10"
+                  >
                     <Trash2 className="h-5 w-5" />
                   </button>
                 </div>
                 <div className="mt-2 flex items-center justify-center gap-1.5">
-                  <button onClick={() => setQty(c.id, c.qty - 1)} className="grid h-11 w-11 place-items-center rounded-xl bg-[var(--secondary)]">
+                  <button
+                    onClick={() => setQty(c.id, c.qty - 1)}
+                    className="grid h-11 w-11 place-items-center rounded-xl bg-[var(--secondary)]"
+                  >
                     <Minus className="h-5 w-5" />
                   </button>
-                  <div className="w-16 text-center text-2xl font-extrabold tabular-nums">{c.qty}</div>
-                  <button onClick={() => setQty(c.id, c.qty + 1)} className="grid h-11 w-11 place-items-center rounded-xl bg-[var(--brand-blue)] text-white">
+                  <div className="w-16 text-center text-2xl font-extrabold tabular-nums">
+                    {c.qty}
+                  </div>
+                  <button
+                    onClick={() => setQty(c.id, c.qty + 1)}
+                    className="grid h-11 w-11 place-items-center rounded-xl bg-[var(--brand-blue)] text-white"
+                  >
                     <Plus className="h-5 w-5" />
                   </button>
                 </div>
@@ -218,11 +319,15 @@ function TransferStockPage() {
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-[var(--secondary)] p-2 text-xs">
               <div>
-                <div className="text-[10px] font-bold uppercase text-muted-foreground">Expected Arrival</div>
+                <div className="text-[10px] font-bold uppercase text-muted-foreground">
+                  Expected Arrival
+                </div>
                 <div className="font-extrabold">Today · 6:30 PM</div>
               </div>
               <div>
-                <div className="text-[10px] font-bold uppercase text-muted-foreground">Vehicle Type</div>
+                <div className="text-[10px] font-bold uppercase text-muted-foreground">
+                  Vehicle Type
+                </div>
                 <div className="font-extrabold">Tata Ace · 1T</div>
               </div>
             </div>
@@ -249,24 +354,57 @@ function TransferStockPage() {
   );
 }
 
-function StoreSelect({ label, value, onChange, accent }: { label: string; value: string; onChange: (v: string) => void; accent: string }) {
+function StoreSelect({
+  label,
+  value,
+  onChange,
+  accent,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  accent: string;
+}) {
   return (
     <div>
-      <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1 flex items-center gap-2 rounded-xl border-2 bg-white p-2" style={{ borderColor: accent }}>
-        <div className="grid h-12 w-12 place-items-center rounded-lg text-white" style={{ backgroundColor: accent }}>
+      <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+      <div
+        className="mt-1 flex items-center gap-2 rounded-xl border-2 bg-white p-2"
+        style={{ borderColor: accent }}
+      >
+        <div
+          className="grid h-12 w-12 place-items-center rounded-lg text-white"
+          style={{ backgroundColor: accent }}
+        >
           <Truck className="h-6 w-6" />
         </div>
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="flex-1 bg-transparent text-base font-extrabold outline-none">
-          {STORES.map(s => <option key={s.id} value={s.id}>{s.name} · {s.area}</option>)}
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="flex-1 bg-transparent text-base font-extrabold outline-none"
+        >
+          {STORES.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name} · {s.area}
+            </option>
+          ))}
         </select>
       </div>
     </div>
   );
 }
 
-function SumStat({ icon: Icon, label, value }: { icon: typeof Package; label: string; value: string }) {
+function SumStat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Package;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-xl border-2 p-2">
       <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
