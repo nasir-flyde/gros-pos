@@ -78,7 +78,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const disc = items.reduce((s, i) => s + (i.product.mrp - i.product.price) * i.qty, 0);
     const after = sub - disc;
     const tx = items.reduce(
-      (s, i) => s + Math.round((i.product.price * i.qty * (i.product.taxRate ?? 0)) / 100),
+      (s, i) => {
+        const rate = i.product.taxRate ?? 0;
+        // GST INCLUSIVE: extract tax from price, not add on top
+        return s + Math.round((i.product.price * i.qty * rate) / (100 + rate));
+      },
       0,
     );
     return {

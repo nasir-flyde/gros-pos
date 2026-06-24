@@ -7,7 +7,8 @@ import { useState } from "react";
 export function CartPanel() {
   const { items, inc, dec, remove, subtotal, discount, afterDisc, tax, count, clear, customer } =
     useCart();
-  const cartTotal = afterDisc + tax;
+  // GST is inclusive in afterDisc — do NOT add tax again
+  const cartTotal = afterDisc;
   const navigate = useNavigate();
 
   return (
@@ -23,7 +24,7 @@ export function CartPanel() {
         </div>
         <Link
           to="/customers"
-          className="tap-target rounded-xl bg-white/15 px-3 text-sm font-bold text-white active:scale-[0.97]"
+          className="tap-target flex items-center justify-center rounded-xl bg-white/15 px-3 py-1.5 text-sm font-bold text-white active:scale-[0.97]"
         >
           {customer ? customer.name.split(" ")[0] : "+ Customer"}
         </Link>
@@ -86,7 +87,7 @@ export function CartPanel() {
       <div className="border-t bg-[var(--surface)] px-4 py-3 text-sm">
         <Row label="Subtotal (MRP)" value={formatINR(subtotal)} />
         <Row label="Discount" value={"– " + formatINR(discount)} positive />
-        <Row label="GST" value={formatINR(tax)} />
+        <Row label="GST (Included)" value={formatINR(tax)} />
         <div className="mt-2 flex items-baseline justify-between border-t pt-2">
           <div className="text-sm font-bold uppercase tracking-wide">Grand Total</div>
           <div className="text-2xl font-extrabold tabular-nums">{formatINR(cartTotal)}</div>

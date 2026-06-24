@@ -7,6 +7,7 @@ import { useCart, type CartProduct } from "@/lib/cart-context";
 import { useAuthStore } from "@/lib/auth-store";
 import { CartPanel } from "@/components/CartPanel";
 import { ScanLine, Plus, Minus, Camera, CameraOff, Package, Search, X, Zap } from "lucide-react";
+import { toast } from "sonner";
 
 type BarcodeDetectorCtor = new (opts?: { formats: string[] }) => {
   detect: (v: HTMLCanvasElement) => Promise<Array<{ rawValue: string }>>;
@@ -187,12 +188,16 @@ function ScannerPage() {
   // ── On lookup result, stop camera (found or not) ────────────────────
   useEffect(() => {
     if (!isFetching && barcodeInput.length >= 6) {
-      stopCamera();
+      // Only stop the camera if the product is NOT found or is out of stock.
+      // If it's found and in-stock, we'll auto-add and keep scanning.
+      if (!scannedVariant || scannedOutOfStock) {
+        stopCamera();
+      }
     }
-  }, [isFetching, barcodeInput, stopCamera]);
+  }, [isFetching, barcodeInput, stopCamera, scannedVariant, scannedOutOfStock]);
 
   // ── Add to cart ─────────────────────────────────────────────────────
-  const addScanned = () => {
+  const addScanned = useCallback(() => {
     if (!scannedVariant || scannedOutOfStock) return;
     const p: CartProduct = {
       _id: scannedVariant._id,
@@ -205,7 +210,20 @@ function ScannerPage() {
     };
     add(p);
     setBarcodeInput("");
-  };
+  }, [scannedVariant, scannedOutOfStock, add]);
+
+  // ── Auto-add to cart on successful scan ──────────────────────────────
+  useEffect(() => {
+    if (scannedVariant && !isFetching && !scannedOutOfStock) {
+      addScanned();
+      toast.success(`Added ${scannedVariant.variantName} to cart`);
+      // Reset scanner for next item
+      detectedRef.current = false;
+      if (cameraActive) {
+        startDetectionLoop();
+      }
+    }
+  }, [scannedVariant, isFetching, scannedOutOfStock, addScanned, cameraActive, startDetectionLoop]);
 
   return (
     <div className="flex h-full overflow-hidden">

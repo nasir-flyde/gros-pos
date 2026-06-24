@@ -44,7 +44,8 @@ function CheckoutPage() {
   const noStore = !storeId;
 
   const deliveryFee = homeDelivery ? (afterDisc > 500 ? 0 : 30) : 0;
-  const grandTotal = afterDisc + deliveryFee + tax;
+  // GST is inclusive in afterDisc — do NOT add tax again
+  const grandTotal = afterDisc + deliveryFee;
 
   const checkoutMutation = useMutation({
     mutationFn: () => {
@@ -245,7 +246,7 @@ function CheckoutPage() {
                   value={deliveryFee === 0 ? "FREE" : formatINR(deliveryFee)}
                 />
               )}
-              <SumRow label="GST" value={formatINR(tax)} />
+              <SumRow label="GST (Included in price)" value={formatINR(tax)} />
             </div>
             <div className="mt-3 flex items-end justify-between border-t pt-3">
               <span className="text-sm font-bold uppercase tracking-wide">Grand Total</span>

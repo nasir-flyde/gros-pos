@@ -139,7 +139,7 @@ function SuccessPage() {
                 </div>
               )}
               <div className="flex justify-between">
-                <span>GST</span>
+                <span>GST (Incl.)</span>
                 <span className="tabular-nums">{formatINR(tax)}</span>
               </div>
             </div>
