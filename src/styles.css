@@ -135,6 +135,10 @@
 
 /* ── Print Styles for Receipt ─────────────────────────────────── */
 @media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
   body * {
     visibility: hidden;
   }
@@ -146,15 +150,15 @@
     position: absolute;
     left: 0;
     top: 0;
-    width: 80mm;
-    padding: 0;
+    width: 72mm;
+    padding: 2mm 4mm;
     margin: 0;
     border: none !important;
     border-radius: 0 !important;
     box-shadow: none !important;
     font-family: "Courier New", "Consolas", monospace !important;
-    font-size: 12px !important;
-    line-height: 1.4 !important;
+    font-size: 10px !important;
+    line-height: 1.3 !important;
     color: #000 !important;
     background: #fff !important;
   }

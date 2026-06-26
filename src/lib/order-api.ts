@@ -84,6 +84,9 @@ export const orderApi = {
   getReceipt: (orderId: string) =>
     api.get<unknown, ApiResponse<Record<string, unknown>>>(`/orders/${orderId}/receipt`),
 
+  getReceiptHtml: (orderId: string) =>
+    api.get<string>(`/orders/${orderId}/receipt/html`, { responseType: 'text' }),
+
   hold: (id: string) => api.patch<unknown, ApiResponse<PosOrder>>(`/orders/${id}/hold`),
 
   resume: (id: string) => api.patch<unknown, ApiResponse<PosOrder>>(`/orders/${id}/resume`),

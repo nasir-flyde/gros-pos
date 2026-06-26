@@ -23,6 +23,7 @@ type CheckoutInfo = {
   payment: "Cash" | "UPI" | "Card" | "Wallet" | "Split";
   delivery: "Home" | "Pickup" | "Walk-Out";
   orderId: string;
+  orderObjectId: string;
   total: number;
   receiptData?: Record<string, unknown>;
   customer: PosCartCustomer | null;

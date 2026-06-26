@@ -66,6 +66,7 @@ function CheckoutPage() {
       const result = res.data;
       setLastCheckout({
         orderId: result.order.orderNumber,
+        orderObjectId: (result.order as unknown as Record<string, unknown>)._id as string,
         payment,
         delivery: homeDelivery ? "Home" : "Walk-Out",
         total: grandTotal,
