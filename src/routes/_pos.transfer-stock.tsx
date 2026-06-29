@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/transfer-stock")({
-  head: () => ({ meta: [{ title: "Transfer Stock — CHOTA BAZAAR" }] }),
+  head: () => ({ meta: [{ title: "Transfer Stock — CHHOTA BAZAAR" }] }),
   component: TransferStockPage,
 });
 

@@ -6,7 +6,7 @@ import { formatINR } from "@/lib/utils";
 import { Play, Trash2, Clock, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/hold")({
-  head: () => ({ meta: [{ title: "Held Orders — CHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Held Orders — CHHOTA BAZAAR POS" }] }),
   component: HoldPage,
 });
 

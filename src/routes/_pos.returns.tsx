@@ -4,7 +4,7 @@ import { formatINR } from "@/lib/pos-data";
 import { Search, Banknote, Smartphone, Wallet, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/returns")({
-  head: () => ({ meta: [{ title: "Returns & Refunds — CHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Returns & Refunds — CHHOTA BAZAAR POS" }] }),
   component: ReturnsPage,
 });
 

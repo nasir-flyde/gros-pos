@@ -1,4 +1,4 @@
-// CHOTA BAZAAR mock catalog & operational data.
+// CHHOTA BAZAAR mock catalog & operational data.
 // Realistic Indian grocery SKUs, prices in INR, areas in metro India.
 
 export type Category = {

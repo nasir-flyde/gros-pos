@@ -74,7 +74,7 @@ function TopHeader() {
             <Store className="h-6 w-6" strokeWidth={2.5} />
           </div>
           <div className="min-w-0">
-            <div className="text-lg font-extrabold leading-tight tracking-tight">CHOTA BAZAAR</div>
+            <div className="text-lg font-extrabold leading-tight tracking-tight">CHHOTA BAZAAR</div>
             <div className="text-[11px] font-medium leading-tight text-white/75">
               Sab Kuch. Kareeb Se.
             </div>

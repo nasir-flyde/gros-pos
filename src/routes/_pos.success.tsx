@@ -5,7 +5,7 @@ import { formatINR } from "@/lib/utils";
 import { CheckCircle2, Printer, Bike, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/success")({
-  head: () => ({ meta: [{ title: "Order Placed — CHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Order Placed — CHHOTA BAZAAR POS" }] }),
   component: SuccessPage,
 });
 
@@ -66,6 +66,7 @@ function SuccessPage() {
       (rdNested?.customerName as string) ?? (rd?.customerName as string) ?? customer ?? "";
     const orderNumber =
       (rdNested?.orderNumber as string) ?? (rd?.orderNumber as string) ?? orderId ?? "";
+    const invoiceNumber = (rd?.receiptNumber as string) ?? orderNumber;
     const paymentMode =
       (rdNested?.paymentMode as string) ?? (rd?.paymentMode as string) ?? payment ?? "";
 
@@ -77,6 +78,7 @@ function SuccessPage() {
     const orgGstin: string = (orgInfo?.gstNumber as string) || (storeInfo?.gstNumber as string) || "";
     const orgEmail: string = (orgInfo?.email as string) || "";
     const fssaiLicense: string = (orgInfo?.fssaiLicense as string) || (storeInfo?.fssaiLicense as string) || "";
+    const cinNumber: string = (orgInfo?.cinNumber as string) || (storeInfo?.cinNumber as string) || "";
 
     const line1 = storeAddress?.line1 || "";
     const line2 = storeAddress?.line2 || "";
@@ -97,9 +99,9 @@ function SuccessPage() {
       const rate = (item.taxRate as number) || 0;
       const lineTotal = (item.lineTotal as number) || 0;
       const half = rate / 2;
-      const cgst = Math.round((lineTotal * half) / 100 * 100) / 100;
-      const sgst = Math.round((lineTotal * half) / 100 * 100) / 100;
       const taxable = Math.round((lineTotal * 100) / (100 + rate) * 100) / 100;
+      const cgst = Math.round(taxable * half) / 100;
+      const sgst = Math.round(taxable * half) / 100;
 
       if (!gstByRate[rate]) gstByRate[rate] = { taxable: 0, cgst: 0, sgst: 0 };
       gstByRate[rate].taxable += taxable;
@@ -137,6 +139,7 @@ function SuccessPage() {
       cashierName,
       customerName,
       orderNumber,
+      invoiceNumber,
       paymentMode,
       stateName,
       stateCode,
@@ -147,7 +150,7 @@ function SuccessPage() {
       grossAmount: Math.round(grossAmount * 100) / 100,
       netSalesValue: Math.round(netSalesValue * 100) / 100,
       gstByRate,
-      storeName: (storeInfo.storeName as string) || "CHOTA BAZAAR",
+      storeName: (storeInfo.storeName as string) || "CHHOTA BAZAAR",
       storePhone: (storeInfo.phone as string) || "",
       storeGst: (storeInfo.gstNumber as string) || "",
       storeCode: (storeInfo.storeCode as string) || "",
@@ -155,6 +158,7 @@ function SuccessPage() {
       orgGstin,
       orgEmail,
       fssaiLicense,
+      cinNumber,
       totalCgst: Math.round(totalCgst * 100) / 100,
       totalSgst: Math.round(totalSgst * 100) / 100,
       totalGst: Math.round(totalGst * 100) / 100,
@@ -187,6 +191,7 @@ function SuccessPage() {
     storePhone,
     storeCode,
     orderNumber,
+    invoiceNumber,
     cashierName,
     itemCount,
     totalQty,
@@ -207,6 +212,7 @@ function SuccessPage() {
     orgLegalName,
     orgGstin,
     fssaiLicense,
+    cinNumber,
     totalCgst,
     totalSgst,
     totalGst,
@@ -259,6 +265,9 @@ function SuccessPage() {
             {fssaiLicense && (
               <div className="text-center text-[10px] text-gray-600">FSSAI LIC NO: {fssaiLicense}</div>
             )}
+            {cinNumber && (
+              <div className="text-center text-[10px] text-gray-600">CIN: {cinNumber}</div>
+            )}
 
             <div className="my-2 border-t border-dashed border-gray-400" />
 
@@ -271,7 +280,7 @@ function SuccessPage() {
 
             {/* Order Info */}
             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
-              <span>Invoice No: {orderNumber}</span>
+              <span>Invoice No: {invoiceNumber}</span>
               <span className="text-right">
                 {new Date().toLocaleDateString("en-IN")} {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
               </span>

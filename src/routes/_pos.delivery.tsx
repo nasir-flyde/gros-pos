@@ -6,7 +6,7 @@ export const Route = createFileRoute("/_pos/delivery")({
   validateSearch: (search: Record<string, string>) => ({
     orderId: search.orderId || "",
   }),
-  head: () => ({ meta: [{ title: "Delivery Assignment — CHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Delivery Assignment — CHHOTA BAZAAR POS" }] }),
   component: DeliveryPage,
 });
 
