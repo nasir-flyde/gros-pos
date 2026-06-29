@@ -11,7 +11,7 @@ import { Search, ScanLine, Mic, Plus, Minus, X, Bike, Package } from "lucide-rea
 export const Route = createFileRoute("/_pos/new-order")({
   head: () => ({
     meta: [
-      { title: "New Order — CHOTA BAZAAR POS" },
+      { title: "New Order — CHHOTA BAZAAR POS" },
       {
         name: "description",
         content: "Fast grocery billing — search, scan, and check out in under 30 seconds.",

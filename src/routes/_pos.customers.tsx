@@ -7,7 +7,7 @@ import { useCart, type PosCartCustomer } from "@/lib/cart-context";
 import { Search, UserPlus, Delete, ArrowRight, Edit3, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/customers")({
-  head: () => ({ meta: [{ title: "Customer Lookup — CHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Customer Lookup — CHHOTA BAZAAR POS" }] }),
   component: CustomersPage,
 });
 

@@ -3,7 +3,7 @@ import { formatINR } from "@/lib/pos-data";
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts";
 
 export const Route = createFileRoute("/_pos/reports")({
-  head: () => ({ meta: [{ title: "Daily Sales Report — CHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Daily Sales Report — CHHOTA BAZAAR POS" }] }),
   component: ReportsPage,
 });
 

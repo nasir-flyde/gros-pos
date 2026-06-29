@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { formatINR } from "@/lib/pos-data";
 
 export const Route = createFileRoute("/_pos/cash")({
-  head: () => ({ meta: [{ title: "Cash Counter — CHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Cash Counter — CHHOTA BAZAAR POS" }] }),
   component: CashPage,
 });
 

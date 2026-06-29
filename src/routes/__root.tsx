@@ -78,15 +78,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "CHOTA BAZAAR POS — Sab Kuch. Kareeb Se." },
+      { title: "CHHOTA BAZAAR POS — Sab Kuch. Kareeb Se." },
       {
         name: "description",
         content:
-          "Touch-first grocery POS for CHOTA BAZAAR stores. Fast billing, deliveries, returns, and store operations.",
+          "Touch-first grocery POS for CHHOTA BAZAAR stores. Fast billing, deliveries, returns, and store operations.",
       },
-      { name: "author", content: "CHOTA BAZAAR" },
-      { property: "og:title", content: "CHOTA BAZAAR POS" },
-      { property: "og:description", content: "Touch-first grocery POS for CHOTA BAZAAR stores." },
+      { name: "author", content: "CHHOTA BAZAAR" },
+      { property: "og:title", content: "CHHOTA BAZAAR POS" },
+      { property: "og:description", content: "Touch-first grocery POS for CHHOTA BAZAAR stores." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

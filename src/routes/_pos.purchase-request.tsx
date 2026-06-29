@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/purchase-request")({
-  head: () => ({ meta: [{ title: "Purchase Request — CHOTA BAZAAR" }] }),
+  head: () => ({ meta: [{ title: "Purchase Request — CHHOTA BAZAAR" }] }),
   component: PurchaseRequestPage,
 });
 

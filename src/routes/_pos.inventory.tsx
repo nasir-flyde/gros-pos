@@ -3,7 +3,7 @@ import { PRODUCTS, formatINR } from "@/lib/pos-data";
 import { TrendingUp, AlertTriangle, XCircle, Truck, ArrowLeftRight, FileText } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/inventory")({
-  head: () => ({ meta: [{ title: "Stock — CHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Stock — CHHOTA BAZAAR POS" }] }),
   component: InventoryPage,
 });
 

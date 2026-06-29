@@ -21,7 +21,7 @@ import {
 export const Route = createFileRoute("/_pos/")({
   head: () => ({
     meta: [
-      { title: "POS Home — CHOTA BAZAAR" },
+      { title: "POS Home — CHHOTA BAZAAR" },
       {
         name: "description",
         content: "Live store operations dashboard for cashiers and store managers.",
