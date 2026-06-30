@@ -2,8 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/utils";
-import { api } from "@/lib/api";
-import { CheckCircle2, Printer, Bike, Plus } from "lucide-react";
+import { CheckCircle2, Printer, Bike, Plus, Download } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/success")({
   head: () => ({ meta: [{ title: "Order Placed — CHHOTA BAZAAR POS" }] }),
@@ -22,6 +21,28 @@ const STATE_CODES: Record<string, string> = {
   "Uttar Pradesh": "09", Uttarakhand: "05", "West Bengal": "19",
 };
 
+function getSavedCheckout() {
+  const raw = sessionStorage.getItem("pos_last_checkout");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as { orderId?: string; receiptData?: Record<string, unknown> };
+  } catch {
+    return null;
+  }
+}
+
+function printReceiptFromPage() {
+  const printContent = document.getElementById("receipt-print");
+  if (!printContent) return false;
+
+  const original = document.body.innerHTML;
+  document.body.innerHTML = printContent.outerHTML;
+  window.print();
+  document.body.innerHTML = original;
+  window.location.reload();
+  return true;
+}
+
 function SuccessPage() {
   const { lastCheckout, items } = useCart();
   const navigate = useNavigate();
@@ -32,23 +53,19 @@ function SuccessPage() {
 
   const downloadTriggered = useRef(false);
   useEffect(() => {
-    if (!lastCheckout || downloadTriggered.current) return;
-    downloadTriggered.current = true;
-    const orderObjectId = (lastCheckout as Record<string, unknown>).orderObjectId as string;
-    if (!orderObjectId) return;
-    (async () => {
-      try {
-        const blob = await api.get<Blob>(`/orders/${orderObjectId}/receipt/pdf`, { responseType: 'blob' }) as unknown as Blob;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `invoice-${lastCheckout.orderId}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } catch { /* silent */ }
-    })();
+    if (downloadTriggered.current) return;
+
+    const saved = getSavedCheckout();
+    const orderId = lastCheckout?.orderId || saved?.orderId;
+    const rd = lastCheckout?.receiptData || saved?.receiptData;
+    if (!orderId || !rd) return;
+
+    const timer = setTimeout(() => {
+      if (printReceiptFromPage()) {
+        downloadTriggered.current = true;
+      }
+    }, 800);
+    return () => clearTimeout(timer);
   }, [lastCheckout]);
 
   const receipt = useMemo(() => {
@@ -198,13 +215,16 @@ function SuccessPage() {
   }, [lastCheckout]);
 
   const printReceipt = () => {
-    const printContent = document.getElementById("receipt-print");
-    if (!printContent) return;
-    const original = document.body.innerHTML;
-    document.body.innerHTML = printContent.outerHTML;
-    window.print();
-    document.body.innerHTML = original;
-    window.location.reload();
+    printReceiptFromPage();
+  };
+
+  const downloadReceipt = () => {
+    const saved = getSavedCheckout();
+    const orderId = lastCheckout?.orderId || saved?.orderId;
+    if (!orderId) return;
+    if (printReceiptFromPage()) {
+      downloadTriggered.current = true;
+    }
   };
 
   if (!receipt) return null;
@@ -509,6 +529,12 @@ function SuccessPage() {
               icon={Printer}
               label="Print Receipt"
               onClick={printReceipt}
+            />
+            <Action
+              color="var(--brand-green)"
+              icon={Download}
+              label="Save PDF"
+              onClick={downloadReceipt}
             />
             {delivery === "Home" && (
               <Action
