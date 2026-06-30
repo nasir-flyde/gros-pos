@@ -50,6 +50,7 @@ export interface PosJoinedVariant {
   mrp: number;
   price: number;
   barcode: string;
+  barcodes: string[];
   imageUrl?: string;
   taxRate: number;
   quantityAvailable?: number;
@@ -89,6 +90,7 @@ function buildJoinedMap(products: PosProduct[], variants: PosVariant[]): PosJoin
         mrp: v.mrp ?? 0,
         price: v.pricePerUnit ?? v.mrp ?? 0,
         barcode: v.barcodes.find((b) => b.isPrimary)?.code ?? v.barcodes[0]?.code ?? "",
+        barcodes: v.barcodes.map((b) => b.code),
         imageUrl: v.images[0]?.url ?? product?.defaultImageUrl,
         taxRate: v.taxRate ?? 0,
         quantityAvailable: v.quantityAvailable,

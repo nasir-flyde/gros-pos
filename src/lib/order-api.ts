@@ -34,6 +34,7 @@ export interface CheckoutPayload {
   }>;
   deliveryType?: "HOME" | "PICKUP" | "WALK_OUT";
   discount?: number;
+  discountPercent?: number;
   delivery?: number;
 }
 
@@ -99,7 +100,7 @@ export const orderApi = {
     deliveryType: string,
     storeId: string,
     cashierId: string,
-    charges: { delivery: number; discount: number; grandTotal: number },
+    charges: { delivery: number; discount: number; grandTotal: number; discountPercent?: number },
     customerId?: string,
   ): CheckoutPayload => ({
     storeId,
@@ -112,6 +113,7 @@ export const orderApi = {
       taxRate: i.product.taxRate,
     })),
     discount: charges.discount,
+    discountPercent: charges.discountPercent,
     delivery: charges.delivery,
     payments: [
       {

@@ -62,6 +62,7 @@ function NewOrderPage() {
           v.variantName.toLowerCase().includes(q) ||
           v.productName.toLowerCase().includes(q) ||
           v.barcode.includes(q) ||
+          v.barcodes.some((b) => b.includes(q)) ||
           v.brandName?.toLowerCase().includes(q),
       );
     }
