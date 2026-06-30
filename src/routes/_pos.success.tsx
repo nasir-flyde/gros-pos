@@ -1,8 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/utils";
 import { CheckCircle2, Printer, Bike, Plus } from "lucide-react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 export const Route = createFileRoute("/_pos/success")({
   head: () => ({ meta: [{ title: "Order Placed — CHHOTA BAZAAR POS" }] }),
@@ -28,6 +30,30 @@ function SuccessPage() {
   useEffect(() => {
     if (!lastCheckout) navigate({ to: "/new-order" });
   }, [lastCheckout, navigate]);
+
+  const downloadTriggered = useRef(false);
+  useEffect(() => {
+    if (!lastCheckout || downloadTriggered.current) return;
+    downloadTriggered.current = true;
+    const el = document.getElementById("receipt-print");
+    if (!el) return;
+    const filename = `invoice-${lastCheckout.orderId}.pdf`;
+    const timer = setTimeout(() => {
+      html2canvas(el, { scale: 2, useCORS: true, logging: false })
+        .then((canvas) => {
+          const imgData = canvas.toDataURL("image/png");
+          const imgW = canvas.width;
+          const imgH = canvas.height;
+          const pdfW = 80; // mm (80mm receipt width)
+          const pdfH = (imgH / imgW) * pdfW;
+          const pdf = new jsPDF({ unit: "mm", format: [pdfW, pdfH], compress: true });
+          pdf.addImage(imgData, "PNG", 0, 0, pdfW, pdfH);
+          pdf.save(filename);
+        })
+        .catch(() => {});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [lastCheckout]);
 
   const receipt = useMemo(() => {
     if (!lastCheckout) return null;
@@ -56,6 +82,7 @@ function SuccessPage() {
       (rdNested?.changeAmount as number) ?? (rd?.changeAmount as number) ?? 0;
     const subtotal = (rdNested?.subtotal as number) ?? (rd?.subtotal as number) ?? 0;
     const discount = (rdNested?.discount as number) ?? (rd?.discount as number) ?? 0;
+    const discountPercent = (rdNested?.discountPercent as number) ?? (rd?.discountPercent as number) ?? 0;
     const tax = (rdNested?.tax as number) ?? (rd?.tax as number) ?? 0;
     const deliveryCharge =
       (rdNested?.delivery as number) ?? (rd?.delivery as number) ?? 0;
@@ -102,6 +129,7 @@ function SuccessPage() {
       const taxable = Math.round((lineTotal * 100) / (100 + rate) * 100) / 100;
       const cgst = Math.round(taxable * half) / 100;
       const sgst = Math.round(taxable * half) / 100;
+      const hsnCode = ((item.sku as string) || '').split('-')[0] || '';
 
       if (!gstByRate[rate]) gstByRate[rate] = { taxable: 0, cgst: 0, sgst: 0 };
       gstByRate[rate].taxable += taxable;
@@ -112,6 +140,7 @@ function SuccessPage() {
         ...item,
         cgst,
         sgst,
+        hsnCode,
       };
     });
 
@@ -133,6 +162,7 @@ function SuccessPage() {
       changeAmount,
       subtotal,
       discount,
+      discountPercent,
       tax,
       deliveryCharge,
       grandTotal,
@@ -197,6 +227,7 @@ function SuccessPage() {
     totalQty,
     grossAmount,
     discount,
+    discountPercent,
     deliveryCharge,
     netSalesValue,
     grandTotal,
@@ -299,6 +330,7 @@ function SuccessPage() {
 
             {/* Column Headers */}
             <div className="flex justify-between text-[10px] font-bold">
+              <span className="w-14 shrink-0">HSN</span>
               <span className="flex-1">Item</span>
               <span className="w-8 text-right shrink-0">Qty</span>
               <span className="w-14 text-right shrink-0">Rate</span>
@@ -310,6 +342,7 @@ function SuccessPage() {
             {/* Line Items */}
             {itemsWithGst.map((item: Record<string, unknown>, idx: number) => {
               const name = (item.variantName as string) || (item.sku as string) || `Item ${idx + 1}`;
+              const hsn = (item.hsnCode as string) || (item.sku as string)?.split('-')[0] || '';
               const price = item.unitPrice as number;
               const qty = item.quantity as number;
               const amt = item.lineTotal as number;
@@ -319,6 +352,7 @@ function SuccessPage() {
               return (
                 <div key={idx}>
                   <div className="flex justify-between text-[10px]">
+                    <span className="w-14 shrink-0 tabular-nums">{hsn.slice(0, 8)}</span>
                     <span className="flex-1 truncate">{name}</span>
                     <span className="w-8 text-right shrink-0 tabular-nums">{qty}</span>
                     <span className="w-14 text-right shrink-0 tabular-nums">
@@ -350,7 +384,7 @@ function SuccessPage() {
               </div>
               {discount > 0 && (
                 <div className="flex justify-between">
-                  <span>Discount:</span>
+                  <span>Discount{discountPercent > 0 ? ` @ ${discountPercent}%` : ''}:</span>
                   <span className="tabular-nums">-{formatINR(discount)}</span>
                 </div>
               )}

@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Loader2,
   AlertTriangle,
+  Percent,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/checkout")({
@@ -36,6 +37,7 @@ function CheckoutPage() {
   const scopes = useAuthStore((s) => s.scopes);
   const [payment, setPayment] = useState<(typeof PAYMENTS)[number]["id"]>("UPI");
   const [homeDelivery, setHomeDelivery] = useState(false);
+  const [discountPct, setDiscountPct] = useState(0);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -44,8 +46,10 @@ function CheckoutPage() {
   const noStore = !storeId;
 
   const deliveryFee = homeDelivery ? (afterDisc > 500 ? 0 : 30) : 0;
+  const extraDiscount = afterDisc > 0 ? Math.round(afterDisc * discountPct / 100) : 0;
+  const totalDiscount = discount + extraDiscount;
   // GST is inclusive in afterDisc — do NOT add tax again
-  const grandTotal = afterDisc + deliveryFee;
+  const grandTotal = afterDisc + deliveryFee - extraDiscount;
 
   const checkoutMutation = useMutation({
     mutationFn: () => {
@@ -57,7 +61,7 @@ function CheckoutPage() {
         homeDelivery ? "Home" : "Walk-Out",
         storeId,
         cashierId,
-        { delivery: deliveryFee, discount, grandTotal },
+        { delivery: deliveryFee, discount: totalDiscount, grandTotal, discountPercent: discountPct || undefined },
         customer?._id,
       );
       return orderApi.checkout(payload);
@@ -241,6 +245,22 @@ function CheckoutPage() {
             <div className="mt-4 space-y-1 border-t pt-3 text-sm">
               <SumRow label="Subtotal (MRP)" value={formatINR(subtotal)} />
               <SumRow label="Discount" value={"– " + formatINR(discount)} positive />
+              <div className="flex items-center justify-between gap-2 py-1">
+                <span className="flex items-center gap-1 font-semibold text-muted-foreground">
+                  <Percent className="h-3.5 w-3.5" /> Extra
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={discountPct}
+                  onChange={(e) => setDiscountPct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                  className="w-20 rounded-lg border-2 bg-background px-2 py-1 text-right font-bold tabular-nums focus:outline-none focus:border-[var(--brand-blue)]"
+                />
+              </div>
+              {extraDiscount > 0 && (
+                <SumRow label="Extra Discount" value={"– " + formatINR(extraDiscount)} positive />
+              )}
               {homeDelivery && (
                 <SumRow
                   label="Delivery"

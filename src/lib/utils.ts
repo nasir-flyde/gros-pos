@@ -6,6 +6,6 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const formatINR = (n: number | null | undefined) => {
-  if (n == null || Number.isNaN(n)) return "₹0";
-  return "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  if (n == null || Number.isNaN(n)) return "₹0.00";
+  return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
