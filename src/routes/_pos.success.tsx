@@ -2,9 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/utils";
+import { api } from "@/lib/api";
 import { CheckCircle2, Printer, Bike, Plus } from "lucide-react";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
 
 export const Route = createFileRoute("/_pos/success")({
   head: () => ({ meta: [{ title: "Order Placed — CHHOTA BAZAAR POS" }] }),
@@ -35,24 +34,21 @@ function SuccessPage() {
   useEffect(() => {
     if (!lastCheckout || downloadTriggered.current) return;
     downloadTriggered.current = true;
-    const el = document.getElementById("receipt-print");
-    if (!el) return;
-    const filename = `invoice-${lastCheckout.orderId}.pdf`;
-    const timer = setTimeout(() => {
-      html2canvas(el, { scale: 2, useCORS: true, logging: false })
-        .then((canvas) => {
-          const imgData = canvas.toDataURL("image/png");
-          const imgW = canvas.width;
-          const imgH = canvas.height;
-          const pdfW = 80; // mm (80mm receipt width)
-          const pdfH = (imgH / imgW) * pdfW;
-          const pdf = new jsPDF({ unit: "mm", format: [pdfW, pdfH], compress: true });
-          pdf.addImage(imgData, "PNG", 0, 0, pdfW, pdfH);
-          pdf.save(filename);
-        })
-        .catch(() => {});
-    }, 500);
-    return () => clearTimeout(timer);
+    const orderObjectId = (lastCheckout as Record<string, unknown>).orderObjectId as string;
+    if (!orderObjectId) return;
+    (async () => {
+      try {
+        const blob = await api.get<Blob>(`/orders/${orderObjectId}/receipt/pdf`, { responseType: 'blob' }) as unknown as Blob;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `invoice-${lastCheckout.orderId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch { /* silent */ }
+    })();
   }, [lastCheckout]);
 
   const receipt = useMemo(() => {
