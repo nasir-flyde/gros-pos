@@ -79,6 +79,10 @@ function CheckoutPage() {
           ? { _id: customer._id, name: customer.name, mobile: customer.mobile, area: customer.area }
           : null,
       });
+      sessionStorage.setItem("pos_last_checkout", JSON.stringify({
+        orderId: result.order.orderNumber,
+        receiptData: result.receipt as Record<string, unknown>,
+      }));
       clear();
       navigate({ to: "/success" });
     },
