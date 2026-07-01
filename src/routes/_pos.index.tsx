@@ -42,7 +42,10 @@ const QUICK_ACTIONS = [
 
 function HomePage() {
   const scopes = useAuthStore((s) => s.scopes);
+  const user = useAuthStore((s) => s.user);
   const storeId = scopes.find((s) => s.type === "store")?.id;
+  const storeName = scopes.find((s) => s.type === "store")?.name ?? "Store";
+  const cashierName = user ? `${user.firstName} ${user.lastName}` : "Cashier";
 
   const { data: recentRes, isLoading } = useQuery({
     queryKey: ["recent-orders", storeId],
@@ -96,7 +99,7 @@ function HomePage() {
     <div className="h-full overflow-y-auto p-5">
       <h1 className="text-2xl font-extrabold">Good Morning! 🌤️</h1>
       <p className="text-sm font-semibold text-muted-foreground">
-        ST-018 Karol Bagh · Cashier
+        {storeName} · {cashierName}
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
