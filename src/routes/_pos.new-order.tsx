@@ -49,8 +49,9 @@ function NewOrderPage() {
     staleTime: 60_000,
   });
 
-  const categories = data?.categories ?? [];
   const variants = data?.variants ?? [];
+  const usedCatIds = new Set(variants.map((v) => v.categoryId).filter(Boolean));
+  const categories = (data?.categories ?? []).filter((c) => usedCatIds.has(c._id));
 
   const filtered = useMemo(() => {
     let list = variants;

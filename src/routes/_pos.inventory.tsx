@@ -29,8 +29,9 @@ function InventoryPage() {
     staleTime: 30_000,
   });
 
-  const categories = data?.categories ?? [];
   const variants = data?.variants ?? [];
+  const usedCatIds = new Set(variants.map((v) => v.categoryId).filter(Boolean));
+  const categories = (data?.categories ?? []).filter((c) => usedCatIds.has(c._id));
 
   const filtered = catId ? variants.filter((v) => v.categoryId === catId) : variants;
 
