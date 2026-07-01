@@ -117,8 +117,8 @@ export const productApi = {
     categoryId?: string;
     storeId?: string;
   }): Promise<{ variants: PosJoinedVariant[]; categories: PosCategory[] }> {
-    const prodParams: Record<string, unknown> = { limit: 200, status: "active" };
-    const varParams: Record<string, unknown> = { limit: 500 };
+    const prodParams: Record<string, unknown> = { limit: 10000, status: "active" };
+    const varParams: Record<string, unknown> = { limit: 10000 };
     if (params?.search) {
       prodParams.search = params.search;
     }
