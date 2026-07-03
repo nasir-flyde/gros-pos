@@ -96,7 +96,12 @@ function ScannerPage() {
     detectedRef.current = false;
 
     const tick = async () => {
+      const detector = detectorRef.current;
       if (detectedRef.current || !videoRef.current || video.paused || video.readyState < 2) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      if (!detector) {
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
@@ -106,7 +111,7 @@ function ScannerPage() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       try {
-        const codes = await detectorRef.current.detect(canvas);
+        const codes = await detector.detect(canvas);
         if (codes.length > 0 && !detectedRef.current) {
           detectedRef.current = true;
           const code = codes[0].rawValue;

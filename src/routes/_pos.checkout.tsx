@@ -3,7 +3,15 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useCart } from "@/lib/cart-context";
 import { useAuthStore } from "@/lib/auth-store";
-import { orderApi } from "@/lib/order-api";
+import { orderApi, type PosOrder } from "@/lib/order-api";
+import type { CheckoutPayment } from "@/lib/order-payload";
+import {
+  buildSplitPaymentEntries,
+  buildPosCheckoutPayload,
+  hasExactPaymentTotal,
+  resolveCheckoutPayments,
+  roundCurrency,
+} from "@/lib/checkout-flow";
 import { formatINR } from "@/lib/utils";
 import {
   Banknote,
@@ -32,57 +40,96 @@ const PAYMENTS = [
 ] as const;
 
 function CheckoutPage() {
-  const { items, customer, subtotal, discount, afterDisc, tax, clear, setLastCheckout } = useCart();
+  const {
+    items,
+    customer,
+    subtotal,
+    discount,
+    afterDisc,
+    tax,
+    clear,
+    setLastCheckout,
+    activeOrderId,
+  } = useCart();
   const authUser = useAuthStore((s) => s.user);
   const scopes = useAuthStore((s) => s.scopes);
   const [payment, setPayment] = useState<(typeof PAYMENTS)[number]["id"]>("UPI");
   const [homeDelivery, setHomeDelivery] = useState(false);
   const [discountPct, setDiscountPct] = useState(0);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [splitPayments, setSplitPayments] = useState<Record<CheckoutPayment["paymentMode"], string>>({
+    CASH: "",
+    UPI: "",
+    CARD: "",
+    WALLET: "",
+  });
   const navigate = useNavigate();
 
   const storeId = scopes.find((s) => s.type === "store")?.id ?? "";
   const cashierId = authUser?.id ?? "";
   const noStore = !storeId;
 
-  const deliveryFee = homeDelivery ? (afterDisc > 500 ? 0 : 30) : 0;
-  const extraDiscount = afterDisc > 0 ? Math.round(afterDisc * discountPct / 100) : 0;
-  const totalDiscount = discount + extraDiscount;
-  // GST is inclusive in afterDisc — do NOT add tax again
-  const grandTotal = afterDisc + deliveryFee - extraDiscount;
+  const sellingSubtotal = afterDisc;
+  const deliveryFee = homeDelivery ? (sellingSubtotal > 500 ? 0 : 30) : 0;
+  const extraDiscount = sellingSubtotal > 0 ? Math.round(sellingSubtotal * discountPct / 100) : 0;
+  // GST is inclusive in the selling subtotal — do NOT add tax again
+  const grandTotal = sellingSubtotal + deliveryFee - extraDiscount;
+  const roundedGrandTotal = roundCurrency(grandTotal);
+
+  const splitPaymentEntries: CheckoutPayment[] = buildSplitPaymentEntries(splitPayments);
+  const splitPaymentTotal = splitPaymentEntries.reduce((sum, payment) => sum + payment.amount, 0);
+  const hasValidSplit = hasExactPaymentTotal(splitPaymentEntries, roundedGrandTotal);
+  const resolvedPayments: CheckoutPayment[] = resolveCheckoutPayments(
+    payment,
+    roundedGrandTotal,
+    splitPayments,
+  );
 
   const checkoutMutation = useMutation({
     mutationFn: () => {
       setCheckoutError(null);
       if (noStore) throw new Error("No store assigned to your account. Contact admin.");
-      const payload = orderApi.buildPayload(
-        items,
+      if (payment === "Split" && !hasValidSplit) {
+        throw new Error("Split payment amounts must add up exactly to the grand total.");
+      }
+      const payload = buildPosCheckoutPayload({
+        cartItems: items,
         payment,
-        homeDelivery ? "Home" : "Walk-Out",
+        grandTotal: roundedGrandTotal,
+        splitPayments,
+        deliveryType: homeDelivery ? "Home" : "Walk-Out",
         storeId,
         cashierId,
-        { delivery: deliveryFee, discount: totalDiscount, grandTotal, discountPercent: discountPct || undefined },
-        customer?._id,
-      );
+        charges: {
+          delivery: deliveryFee,
+          // Product prices are already discounted before checkout; only send the manual extra discount.
+          discount: extraDiscount,
+          discountPercent: extraDiscount > 0 ? discountPct : undefined,
+        },
+        customerId: customer?._id,
+        orderId: activeOrderId ?? undefined,
+      });
       return orderApi.checkout(payload);
     },
     onSuccess: (res) => {
       const result = res.data;
-      setLastCheckout({
-        orderId: result.order.orderNumber,
-        orderObjectId: (result.order as unknown as Record<string, unknown>)._id as string,
+      const checkoutOrder = result.order as PosOrder;
+      const deliveryLabel: "Home" | "Walk-Out" = homeDelivery ? "Home" : "Walk-Out";
+      const checkoutSummary = {
+        orderId: checkoutOrder.orderNumber,
+        orderObjectId: checkoutOrder._id,
         payment,
-        delivery: homeDelivery ? "Home" : "Walk-Out",
-        total: grandTotal,
-        receiptData: result.receipt as Record<string, unknown>,
+        delivery: deliveryLabel,
+        total: roundedGrandTotal,
+        receiptData: (result.receipt as Record<string, unknown> | null) ?? undefined,
+        receiptStatus: result.receiptStatus,
+        receiptWarning: result.receiptWarning,
         customer: customer
           ? { _id: customer._id, name: customer.name, mobile: customer.mobile, area: customer.area }
           : null,
-      });
-      sessionStorage.setItem("pos_last_checkout", JSON.stringify({
-        orderId: result.order.orderNumber,
-        receiptData: result.receipt as Record<string, unknown>,
-      }));
+      };
+      setLastCheckout(checkoutSummary);
+      sessionStorage.setItem("pos_last_checkout", JSON.stringify(checkoutSummary));
       clear();
       navigate({ to: "/success" });
     },
@@ -223,6 +270,42 @@ function CheckoutPage() {
                 );
               })}
             </div>
+            {payment === "Split" ? (
+              <div className="mt-4 rounded-2xl border-2 bg-card p-4">
+                <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  Split Payment Allocation
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {(["CASH", "UPI", "CARD", "WALLET"] as const).map((mode) => (
+                    <label key={mode} className="rounded-xl border bg-background px-3 py-2">
+                      <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                        {mode}
+                      </div>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={splitPayments[mode]}
+                        onChange={(event) =>
+                          setSplitPayments((current) => ({
+                            ...current,
+                            [mode]: event.target.value,
+                          }))
+                        }
+                        className="mt-1 w-full bg-transparent text-lg font-extrabold tabular-nums focus:outline-none"
+                        placeholder="0.00"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center justify-between rounded-xl bg-[var(--secondary)] px-4 py-3">
+                  <span className="text-sm font-bold uppercase tracking-wide">Split Total</span>
+                  <span className={"text-lg font-extrabold tabular-nums " + (hasValidSplit ? "text-[var(--brand-green)]" : "text-[var(--brand-red)]")}>
+                    {formatINR(splitPaymentTotal)} / {formatINR(roundedGrandTotal)}
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </Section>
         </div>
 
@@ -248,7 +331,7 @@ function CheckoutPage() {
             </ul>
             <div className="mt-4 space-y-1 border-t pt-3 text-sm">
               <SumRow label="Subtotal (MRP)" value={formatINR(subtotal)} />
-              <SumRow label="Discount" value={"– " + formatINR(discount)} positive />
+              <SumRow label="Catalog Discount" value={"– " + formatINR(discount)} positive />
               <div className="flex items-center justify-between gap-2 py-1">
                 <span className="flex items-center gap-1 font-semibold text-muted-foreground">
                   <Percent className="h-3.5 w-3.5" /> Extra
@@ -277,6 +360,11 @@ function CheckoutPage() {
               <span className="text-sm font-bold uppercase tracking-wide">Grand Total</span>
               <span className="text-3xl font-extrabold tabular-nums">{formatINR(grandTotal)}</span>
             </div>
+            {activeOrderId ? (
+              <div className="mt-3 rounded-xl bg-[var(--secondary)] px-4 py-3 text-sm font-semibold text-muted-foreground">
+                Completing resumed order #{activeOrderId.slice(-6).toUpperCase()}
+              </div>
+            ) : null}
           </div>
           {checkoutError && (
             <div className="mx-3 flex items-start gap-2 rounded-xl border-2 border-[var(--brand-red)]/30 bg-[var(--brand-red)]/5 p-3 text-sm font-semibold text-[var(--brand-red)]">

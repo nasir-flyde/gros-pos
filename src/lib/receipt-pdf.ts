@@ -49,6 +49,12 @@ export function generateReceiptPdf(r: Record<string, unknown>) {
     return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  function splitText(text: string, width: number, size = FONT_SIZE - 1) {
+    doc.setFont(FONT, "normal");
+    doc.setFontSize(size);
+    return doc.splitTextToSize(text || "", width) as string[];
+  }
+
   // ── Store Header ──
   txt(data.storeName, { size: 14, bold: true, align: "center", spacing: SM });
   if (data.orgLegalName) txt(data.orgLegalName, { size: 10, align: "center", spacing: SM + 1 });
@@ -86,16 +92,34 @@ export function generateReceiptPdf(r: Record<string, unknown>) {
   }
   itemHeader();
 
+  const x1 = ML;
+  const x2 = x1 + c1;
+  const x3 = x2 + c2;
+  const x4 = x3 + c3;
+  const x5 = x4 + c4;
+
   for (const item of data.itemsWithGst as Array<Record<string, unknown>>) {
     const hsn = ((item.hsnCode as string) || "").slice(0, 6);
-    const name = ((item.variantName as string) || "").slice(0, Math.floor(c2 / (FONT_SIZE * 0.25)));
+    const name = (item.variantName as string) || "";
     const qty = String(item.quantity ?? 1);
     const rate = fmt(item.unitPrice as number);
     const amt = fmt(item.lineTotal as number);
-    txt(
-      pad(hsn, c1) + pad(name, c2) + pad(qty, c3, "r") + pad(rate, c4, "r") + pad(amt, c5, "r"),
-      { spacing: LH + 1 },
-    );
+    const wrappedName = splitText(name, c2, FONT_SIZE - 1);
+
+    doc.setFont(FONT, "normal");
+    doc.setFontSize(FONT_SIZE - 1);
+    doc.text(hsn, x1, y);
+    doc.text(wrappedName[0] || "", x2, y);
+    doc.text(qty, x3 + c3, y, { align: "right" });
+    doc.text(rate, x4 + c4, y, { align: "right" });
+    doc.text(amt, x5 + c5, y, { align: "right" });
+    y += LH + 1;
+
+    for (const line of wrappedName.slice(1)) {
+      doc.text(line, x2, y);
+      y += LH;
+    }
+
     const taxRate = (item.taxRate as number) || 0;
     if (taxRate > 0) {
       const half = taxRate / 2;

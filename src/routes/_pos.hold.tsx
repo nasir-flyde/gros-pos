@@ -2,8 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { orderApi, type PosOrder } from "@/lib/order-api";
 import { useAuthStore } from "@/lib/auth-store";
+import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/utils";
 import { Play, Trash2, Clock, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useNavigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_pos/hold")({
   head: () => ({ meta: [{ title: "Held Orders — CHHOTA BAZAAR POS" }] }),
@@ -17,6 +20,8 @@ function HoldPage() {
   const queryClient = useQueryClient();
   const scopes = useAuthStore((s) => s.scopes);
   const storeId = scopes.find((s) => s.type === "store")?.id;
+  const { loadHeldOrder } = useCart();
+  const navigate = useNavigate();
 
   const { data: listRes, isLoading } = useQuery({
     queryKey: ["held-orders", storeId],
@@ -30,9 +35,22 @@ function HoldPage() {
   });
 
   const resumeMutation = useMutation({
-    mutationFn: (id: string) => orderApi.resume(id),
-    onSuccess: () => {
+    mutationFn: async (id: string) => {
+      await orderApi.resume(id);
+      return orderApi.getById(id);
+    },
+    onSuccess: (response) => {
+      loadHeldOrder(response.data);
       queryClient.invalidateQueries({ queryKey: ["held-orders"] });
+      toast.success("Held order restored to cart");
+      navigate({ to: "/checkout" });
+    },
+    onError: (error: unknown) => {
+      const message =
+        typeof error === "object" && error && "message" in error
+          ? String(error.message)
+          : "Failed to resume held order";
+      toast.error(message);
     },
   });
 
@@ -40,6 +58,13 @@ function HoldPage() {
     mutationFn: (id: string) => orderApi.cancel(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["held-orders"] });
+    },
+    onError: (error: unknown) => {
+      const message =
+        typeof error === "object" && error && "message" in error
+          ? String(error.message)
+          : "Failed to cancel held order";
+      toast.error(message);
     },
   });
 

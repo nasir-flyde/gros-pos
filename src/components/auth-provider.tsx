@@ -90,11 +90,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!user) throw new Error("Invalid /me response");
         setGrosAccess({
           user: {
-            id: user._id ?? user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phone: user.phone,
+            id: user._id ?? user.id ?? "",
+            firstName: user.firstName ?? "",
+            lastName: user.lastName ?? "",
+            email: user.email ?? "",
+            phone: user.phone ?? "",
             isSuperAdmin: Boolean(user.isSuperAdmin),
             organizationId: user.organizationId ?? null,
           },

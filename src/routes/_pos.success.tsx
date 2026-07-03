@@ -1,280 +1,169 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useCart } from "@/lib/cart-context";
-import { formatINR } from "@/lib/utils";
+import { normalizeReceiptData, isReceiptPrintable, type ReceiptStatus } from "@/lib/receipt";
+import { printNormalizedReceipt } from "@/lib/receipt-print";
 import { CheckCircle2, Printer, Bike, Plus, Download } from "lucide-react";
+import { ReceiptPrintContent } from "@/components/receipt/receipt-print-content";
 
 export const Route = createFileRoute("/_pos/success")({
   head: () => ({ meta: [{ title: "Order Placed — CHHOTA BAZAAR POS" }] }),
   component: SuccessPage,
 });
 
-const STATE_CODES: Record<string, string> = {
-  "Andhra Pradesh": "37", "Arunachal Pradesh": "12", Assam: "18",
-  Bihar: "10", Chhattisgarh: "22", Goa: "30", Gujarat: "24",
-  Haryana: "06", "Himachal Pradesh": "02", "Jammu and Kashmir": "01",
-  Jharkhand: "20", Karnataka: "29", Kerala: "32",
-  "Madhya Pradesh": "23", Maharashtra: "27", Manipur: "14",
-  Meghalaya: "17", Mizoram: "15", Nagaland: "13", Odisha: "21",
-  Punjab: "03", Rajasthan: "08", Sikkim: "11",
-  "Tamil Nadu": "33", Telangana: "36", Tripura: "16",
-  "Uttar Pradesh": "09", Uttarakhand: "05", "West Bengal": "19",
+type SavedCheckout = {
+  payment: "Cash" | "UPI" | "Card" | "Wallet" | "Split";
+  delivery: "Home" | "Pickup" | "Walk-Out";
+  orderId: string;
+  orderObjectId?: string;
+  total: number;
+  receiptData?: Record<string, unknown>;
+  receiptStatus?: ReceiptStatus;
+  receiptWarning?: string;
+  customer: {
+    _id: string;
+    name: string;
+    mobile: string;
+    area?: string;
+  } | null;
 };
 
 function getSavedCheckout() {
+  if (typeof window === "undefined") return null;
   const raw = sessionStorage.getItem("pos_last_checkout");
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as { orderId?: string; receiptData?: Record<string, unknown> };
+    return JSON.parse(raw) as SavedCheckout;
   } catch {
     return null;
   }
 }
 
-function printReceiptFromPage() {
-  const printContent = document.getElementById("receipt-print");
-  if (!printContent) return false;
-
-  const original = document.body.innerHTML;
-  document.body.innerHTML = printContent.outerHTML;
-  window.print();
-  document.body.innerHTML = original;
-  window.location.reload();
-  return true;
-}
-
-function SuccessPage() {
-  const { lastCheckout, items } = useCart();
+export function SuccessPage() {
+  const { lastCheckout } = useCart();
   const navigate = useNavigate();
+  const savedCheckout = useMemo(() => getSavedCheckout(), []);
+  const checkout = lastCheckout ?? savedCheckout;
 
   useEffect(() => {
-    if (!lastCheckout) navigate({ to: "/new-order" });
-  }, [lastCheckout, navigate]);
+    if (!checkout) navigate({ to: "/new-order" });
+  }, [checkout, navigate]);
+
+  const receipt = useMemo(() => {
+    if (!checkout) return null;
+    return normalizeReceiptData(checkout.receiptData, {
+      orderId: checkout.orderId,
+      total: checkout.total,
+      payment: checkout.payment,
+      delivery: checkout.delivery,
+      customer: checkout.customer,
+    });
+  }, [checkout]);
 
   const downloadTriggered = useRef(false);
   useEffect(() => {
     if (downloadTriggered.current) return;
-
-    const saved = getSavedCheckout();
-    const orderId = lastCheckout?.orderId || saved?.orderId;
-    const rd = lastCheckout?.receiptData || saved?.receiptData;
-    if (!orderId || !rd) return;
+    if (!receipt || !isReceiptPrintable(checkout?.receiptStatus)) return;
 
     const timer = setTimeout(() => {
-      if (printReceiptFromPage()) {
-        downloadTriggered.current = true;
-      }
+      void printNormalizedReceipt(receipt).then((printed) => {
+        if (printed) {
+          downloadTriggered.current = true;
+        }
+      });
     }, 800);
     return () => clearTimeout(timer);
-  }, [lastCheckout]);
+  }, [checkout?.receiptStatus, receipt]);
 
-  const receipt = useMemo(() => {
-    if (!lastCheckout) return null;
+  const receiptStatus = checkout?.receiptStatus;
+  const receiptUnavailable = receiptStatus === "unavailable";
+  const receiptPending = receiptStatus === "pending_fulfillment";
+  const receiptWarning = checkout?.receiptWarning;
 
-    const { orderId, customer, total, payment, delivery, receiptData } = lastCheckout;
-
-    const rd = receiptData as Record<string, unknown> | undefined;
-    const rdNested = (rd?.receiptData ?? rd) as Record<string, unknown> | undefined;
-
-    const rdItems: Record<string, unknown>[] =
-      (rdNested?.items as Record<string, unknown>[]) ||
-      (rd?.items as Record<string, unknown>[]) ||
-      [];
-
-    const storeInfo = (rdNested?.storeInfo ??
-      rd?.storeInfo ??
-      {}) as Record<string, unknown>;
-
-    const payments: Record<string, unknown>[] =
-      (rdNested?.payments as Record<string, unknown>[]) ||
-      (rd?.payments as Record<string, unknown>[]) ||
-      [];
-
-    const paid = (rdNested?.paid as number) ?? (rd?.paid as number) ?? total;
-    const changeAmount =
-      (rdNested?.changeAmount as number) ?? (rd?.changeAmount as number) ?? 0;
-    const subtotal = (rdNested?.subtotal as number) ?? (rd?.subtotal as number) ?? 0;
-    const discount = (rdNested?.discount as number) ?? (rd?.discount as number) ?? 0;
-    const discountPercent = (rdNested?.discountPercent as number) ?? (rd?.discountPercent as number) ?? 0;
-    const tax = (rdNested?.tax as number) ?? (rd?.tax as number) ?? 0;
-    const deliveryCharge =
-      (rdNested?.delivery as number) ?? (rd?.delivery as number) ?? 0;
-    const grandTotal =
-      (rdNested?.grandTotal as number) ?? (rd?.grandTotal as number) ?? total;
-    const cashierName = (rdNested?.cashierName as string) ?? (rd?.cashierName as string) ?? "";
-    const customerName =
-      (rdNested?.customerName as string) ?? (rd?.customerName as string) ?? customer ?? "";
-    const orderNumber =
-      (rdNested?.orderNumber as string) ?? (rd?.orderNumber as string) ?? orderId ?? "";
-    const invoiceNumber = (rd?.receiptNumber as string) ?? orderNumber;
-    const paymentMode =
-      (rdNested?.paymentMode as string) ?? (rd?.paymentMode as string) ?? payment ?? "";
-
-    const storeAddress = storeInfo?.address as Record<string, string> | undefined;
-    const stateName = storeAddress?.state || "";
-    const stateCode = STATE_CODES[stateName] || "";
-    const orgInfo = (rdNested?.organizationInfo as Record<string, unknown>) || null;
-    const orgLegalName = (orgInfo?.legalName as string) || "";
-    const orgGstin: string = (orgInfo?.gstNumber as string) || (storeInfo?.gstNumber as string) || "";
-    const orgEmail: string = (orgInfo?.email as string) || "";
-    const fssaiLicense: string = (orgInfo?.fssaiLicense as string) || (storeInfo?.fssaiLicense as string) || "";
-    const cinNumber: string = (orgInfo?.cinNumber as string) || (storeInfo?.cinNumber as string) || "";
-
-    const line1 = storeAddress?.line1 || "";
-    const line2 = storeAddress?.line2 || "";
-    const city = storeAddress?.city || "";
-    const pincode = storeAddress?.pincode || "";
-    const addressStr = [line1, line2].filter(Boolean).join(", ");
-    const cityLine = [city, stateName, pincode].filter(Boolean).join(", ");
-
-    const itemCount = rdItems.length;
-    const totalQty = rdItems.reduce((s, i) => s + ((i.quantity as number) || 0), 0);
-    const grossAmount = rdItems.reduce(
-      (s, i) => s + ((i.unitPrice as number) || 0) * ((i.quantity as number) || 0),
-      0,
-    );
-
-    const gstByRate: Record<number, { taxable: number; cgst: number; sgst: number }> = {};
-    const itemsWithGst = rdItems.map((item) => {
-      const rate = (item.taxRate as number) || 0;
-      const lineTotal = (item.lineTotal as number) || 0;
-      const half = rate / 2;
-      const taxable = Math.round((lineTotal * 100) / (100 + rate) * 100) / 100;
-      const cgst = Math.round(taxable * half) / 100;
-      const sgst = Math.round(taxable * half) / 100;
-      const hsnCode = ((item.sku as string) || '').split('-')[0] || '';
-
-      if (!gstByRate[rate]) gstByRate[rate] = { taxable: 0, cgst: 0, sgst: 0 };
-      gstByRate[rate].taxable += taxable;
-      gstByRate[rate].cgst += cgst;
-      gstByRate[rate].sgst += sgst;
-
-      return {
-        ...item,
-        cgst,
-        sgst,
-        hsnCode,
-      };
-    });
-
-    const netSalesValue = subtotal + tax - discount;
-    const totalCgst = Object.values(gstByRate).reduce((s, r) => s + r.cgst, 0);
-    const totalSgst = Object.values(gstByRate).reduce((s, r) => s + r.sgst, 0);
-    const totalGst = totalCgst + totalSgst;
-    const taxableValue = Object.values(gstByRate).reduce((s, r) => s + r.taxable, 0);
-
-    return {
-      orderId,
-      total,
-      rdItems,
-      itemsWithGst,
-      storeInfo,
-      storeAddress,
-      payments,
-      paid,
-      changeAmount,
-      subtotal,
-      discount,
-      discountPercent,
-      tax,
-      deliveryCharge,
-      grandTotal,
-      cashierName,
-      customerName,
-      orderNumber,
-      invoiceNumber,
-      paymentMode,
-      stateName,
-      stateCode,
-      addressStr,
-      cityLine,
-      itemCount,
-      totalQty,
-      grossAmount: Math.round(grossAmount * 100) / 100,
-      netSalesValue: Math.round(netSalesValue * 100) / 100,
-      gstByRate,
-      storeName: (storeInfo.storeName as string) || "CHHOTA BAZAAR",
-      storePhone: (storeInfo.phone as string) || "",
-      storeGst: (storeInfo.gstNumber as string) || "",
-      storeCode: (storeInfo.storeCode as string) || "",
-      orgLegalName,
-      orgGstin,
-      orgEmail,
-      fssaiLicense,
-      cinNumber,
-      totalCgst: Math.round(totalCgst * 100) / 100,
-      totalSgst: Math.round(totalSgst * 100) / 100,
-      totalGst: Math.round(totalGst * 100) / 100,
-      taxableValue: Math.round(taxableValue * 100) / 100,
-      paymentRef:
-        payments[0]?.referenceNumber || payments[0]?._id
-          ? String(payments[0]?.referenceNumber || payments[0]?._id).slice(-8)
-          : "",
-      delivery,
-    };
-  }, [lastCheckout]);
-
-  const printReceipt = () => {
-    printReceiptFromPage();
+  const printReceipt = async () => {
+    if (!receipt) return;
+    await printNormalizedReceipt(receipt);
   };
 
-  const downloadReceipt = () => {
-    const saved = getSavedCheckout();
-    const orderId = lastCheckout?.orderId || saved?.orderId;
-    if (!orderId) return;
-    if (printReceiptFromPage()) {
+  const downloadReceipt = async () => {
+    if (!receipt) return;
+    if (await printNormalizedReceipt(receipt)) {
       downloadTriggered.current = true;
     }
   };
 
+  if (!receipt && !receiptUnavailable && !receiptPending) return null;
+
+  if (!receipt && receiptUnavailable) {
+    return (
+      <div className="h-full overflow-y-auto p-6">
+        <div className="mx-auto max-w-2xl rounded-3xl border-2 border-[var(--brand-green)]/30 bg-card p-8 text-center shadow-lg">
+          <div className="mx-auto grid h-24 w-24 place-items-center rounded-full bg-[var(--brand-green)] text-white shadow-md">
+            <CheckCircle2 className="h-14 w-14" strokeWidth={2.5} />
+          </div>
+          <h1 className="mt-4 text-3xl font-extrabold tracking-tight">Order Placed!</h1>
+          <p className="mt-1 text-sm font-semibold text-muted-foreground">
+            The sale is complete, but the receipt could not be generated right now.
+          </p>
+          {receiptWarning && (
+            <p className="mt-3 rounded-2xl border border-[var(--brand-orange)]/30 bg-[var(--brand-orange)]/5 px-4 py-3 text-sm font-semibold text-[var(--brand-orange)]">
+              {receiptWarning}
+            </p>
+          )}
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link
+              to="/new-order"
+              className="inline-flex tap-target items-center rounded-2xl bg-[var(--brand-blue)] px-5 font-bold text-white"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Order
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!receipt && receiptPending) {
+    return (
+      <div className="h-full overflow-y-auto p-6">
+        <div className="mx-auto max-w-2xl rounded-3xl border-2 border-[var(--brand-orange)]/30 bg-card p-8 text-center shadow-lg">
+          <div className="mx-auto grid h-24 w-24 place-items-center rounded-full bg-[var(--brand-orange)] text-white shadow-md">
+            <CheckCircle2 className="h-14 w-14" strokeWidth={2.5} />
+          </div>
+          <h1 className="mt-4 text-3xl font-extrabold tracking-tight">Order Placed!</h1>
+          <p className="mt-1 text-sm font-semibold text-muted-foreground">
+            Receipt will be available after fulfillment or pickup confirmation.
+          </p>
+          {receiptWarning && (
+            <p className="mt-3 rounded-2xl border border-[var(--brand-orange)]/30 bg-[var(--brand-orange)]/5 px-4 py-3 text-sm font-semibold text-[var(--brand-orange)]">
+              {receiptWarning}
+            </p>
+          )}
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            {checkout?.delivery === "Home" || checkout?.delivery === "Pickup" ? (
+              <button
+                className="inline-flex tap-target items-center rounded-2xl bg-[var(--brand-orange)] px-5 font-bold text-white"
+                onClick={() => navigate({ to: "/delivery" })}
+              >
+                <Bike className="mr-2 h-4 w-4" />
+                Open Fulfillment
+              </button>
+            ) : null}
+            <Link
+              to="/new-order"
+              className="inline-flex tap-target items-center rounded-2xl bg-[var(--brand-blue)] px-5 font-bold text-white"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Order
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!receipt) return null;
-
-  const {
-    itemsWithGst,
-    storeName,
-    addressStr,
-    cityLine,
-    storePhone,
-    storeCode,
-    orderNumber,
-    invoiceNumber,
-    cashierName,
-    itemCount,
-    totalQty,
-    grossAmount,
-    discount,
-    discountPercent,
-    deliveryCharge,
-    netSalesValue,
-    grandTotal,
-    paid,
-    changeAmount,
-    paymentMode,
-    paymentRef,
-    gstByRate,
-    customerName,
-    delivery,
-    orderId,
-    total,
-    orgLegalName,
-    orgGstin,
-    fssaiLicense,
-    cinNumber,
-    totalCgst,
-    totalSgst,
-    totalGst,
-    taxableValue,
-  } = receipt;
-
-  const gstSlabs = Object.entries(gstByRate)
-    .map(([rate, vals]) => ({
-      rate: Number(rate),
-      ...vals,
-      total: vals.taxable + vals.cgst + vals.sgst,
-    }))
-    .sort((a, b) => a.rate - b.rate);
-
-  const gstGrandTotal = gstSlabs.reduce((s, r) => s + r.total, 0);
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -288,239 +177,7 @@ function SuccessPage() {
             Receipt ready to print
           </p>
 
-          {/* Receipt Preview */}
-          <div
-            id="receipt-print"
-            className="mx-auto mt-6 max-w-sm rounded-2xl border-2 bg-white p-5 text-left font-mono text-xs leading-relaxed text-black shadow-sm"
-          >
-            {/* Store Header */}
-            <div className="text-center font-bold text-sm uppercase tracking-wide">
-              {storeName}
-            </div>
-            {orgLegalName && (
-              <div className="text-center text-[11px]">{orgLegalName}</div>
-            )}
-            {addressStr && (
-              <div className="text-center text-[10px] text-gray-600">{addressStr}</div>
-            )}
-            {cityLine && (
-              <div className="text-center text-[10px] text-gray-600">{cityLine}</div>
-            )}
-            {orgGstin && (
-              <div className="text-center text-[10px] text-gray-600">GSTIN: {orgGstin}</div>
-            )}
-            {fssaiLicense && (
-              <div className="text-center text-[10px] text-gray-600">FSSAI LIC NO: {fssaiLicense}</div>
-            )}
-            {cinNumber && (
-              <div className="text-center text-[10px] text-gray-600">CIN: {cinNumber}</div>
-            )}
-
-            <div className="my-2 border-t border-dashed border-gray-400" />
-
-            {/* Tax Invoice Header */}
-            <div className="text-center font-bold text-xs tracking-wide">
-              TAX INVOICE
-            </div>
-
-            <div className="my-1.5 border-t border-dashed border-gray-300" />
-
-            {/* Order Info */}
-            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
-              <span>Invoice No: {invoiceNumber}</span>
-              <span className="text-right">
-                {new Date().toLocaleDateString("en-IN")} {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
-              </span>
-              {storeCode && (
-                <span className="col-span-2">Store Code: {storeCode}</span>
-              )}
-              {cashierName && (
-                <span className="col-span-2">Cashier: {cashierName}</span>
-              )}
-              {customerName && (
-                <span className="col-span-2 truncate">Customer: {customerName}</span>
-              )}
-            </div>
-
-            <div className="my-1.5 border-t border-dashed border-gray-300" />
-
-            {/* Column Headers */}
-            <div className="flex justify-between text-[10px] font-bold">
-              <span className="w-14 shrink-0">HSN</span>
-              <span className="flex-1">Item</span>
-              <span className="w-8 text-right shrink-0">Qty</span>
-              <span className="w-14 text-right shrink-0">Rate</span>
-              <span className="w-14 text-right shrink-0">Amount</span>
-            </div>
-
-            <div className="my-1 border-t border-gray-300" />
-
-            {/* Line Items */}
-            {itemsWithGst.map((item: Record<string, unknown>, idx: number) => {
-              const name = (item.variantName as string) || (item.sku as string) || `Item ${idx + 1}`;
-              const hsn = (item.hsnCode as string) || (item.sku as string)?.split('-')[0] || '';
-              const price = item.unitPrice as number;
-              const qty = item.quantity as number;
-              const amt = item.lineTotal as number;
-              const rate = (item.taxRate as number) || 0;
-              const cgstAmt = (item.cgst as number) || 0;
-              const sgstAmt = (item.sgst as number) || 0;
-              return (
-                <div key={idx}>
-                  <div className="flex justify-between text-[10px]">
-                    <span className="w-14 shrink-0 tabular-nums">{hsn.slice(0, 8)}</span>
-                    <span className="flex-1 truncate">{name}</span>
-                    <span className="w-8 text-right shrink-0 tabular-nums">{qty}</span>
-                    <span className="w-14 text-right shrink-0 tabular-nums">
-                      {formatINR(price)}
-                    </span>
-                    <span className="w-14 text-right shrink-0 tabular-nums">
-                      {formatINR(amt)}
-                    </span>
-                  </div>
-                  {rate > 0 && (
-                    <div className="text-[9px] text-gray-500 text-right -mt-0.5 mb-0.5">
-                      CGST @{rate / 2}%: {formatINR(cgstAmt)}  SGST @{rate / 2}%: {formatINR(sgstAmt)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            <div className="my-1.5 border-t border-dashed border-gray-300" />
-
-            {/* Summary — matching template order */}
-            <div className="space-y-0.5 text-[10px]">
-              <div className="flex justify-between">
-                <span>Total Items: {itemCount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Gross Amount:</span>
-                <span className="tabular-nums">{formatINR(grossAmount)}</span>
-              </div>
-              {discount > 0 && (
-                <div className="flex justify-between">
-                  <span>Discount{discountPercent > 0 ? ` @ ${discountPercent}%` : ''}:</span>
-                  <span className="tabular-nums">-{formatINR(discount)}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span>Net Sales Value:</span>
-                <span className="tabular-nums">{formatINR(netSalesValue)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>CGST:</span>
-                <span className="tabular-nums">{formatINR(totalCgst)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>SGST:</span>
-                <span className="tabular-nums">{formatINR(totalSgst)}</span>
-              </div>
-            </div>
-
-            <div className="my-1.5 border-t border-dashed border-gray-400" />
-
-            <div className="flex justify-between font-bold text-xs">
-              <span>TOTAL PAID:</span>
-              <span className="tabular-nums">{formatINR(grandTotal)}</span>
-            </div>
-
-            <div className="mt-1 text-[10px] space-y-0.5">
-              <div className="flex justify-between">
-                <span>Payment Mode:</span>
-                <span className="tabular-nums">{paymentMode}</span>
-              </div>
-              {paymentRef && (
-                <div className="flex justify-between">
-                  <span>Ref No:</span>
-                  <span className="tabular-nums">{paymentRef}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="my-1.5 border-t border-dashed border-gray-400" />
-
-            {/* GST Breakup */}
-            {gstSlabs.length > 0 && (
-              <>
-                <div className="text-center text-[10px] font-bold mb-1">
-                  GST BREAKUP DETAILS
-                </div>
-                <div className="flex justify-between text-[9px] font-bold border-b border-gray-300 pb-0.5">
-                  <span className="w-10">GST %</span>
-                  <span className="w-14 text-right">Taxable</span>
-                  <span className="w-12 text-right">CGST</span>
-                  <span className="w-12 text-right">SGST</span>
-                  <span className="w-14 text-right">Total</span>
-                </div>
-                {gstSlabs.map((slab) => (
-                  <div key={slab.rate} className="flex justify-between text-[9px]">
-                    <span className="w-10 tabular-nums">{slab.rate}%</span>
-                    <span className="w-14 text-right tabular-nums">
-                      {formatINR(slab.taxable)}
-                    </span>
-                    <span className="w-12 text-right tabular-nums">
-                      {formatINR(slab.cgst)}
-                    </span>
-                    <span className="w-12 text-right tabular-nums">
-                      {formatINR(slab.sgst)}
-                    </span>
-                    <span className="w-14 text-right tabular-nums">
-                      {formatINR(slab.total)}
-                    </span>
-                  </div>
-                ))}
-                <div className="flex justify-between text-[9px] font-bold border-t border-gray-300 pt-0.5 mt-0.5">
-                  <span className="w-10">Total</span>
-                  <span className="w-14 text-right tabular-nums">
-                    {formatINR(gstSlabs.reduce((s, r) => s + r.taxable, 0))}
-                  </span>
-                  <span className="w-12 text-right tabular-nums">
-                    {formatINR(gstSlabs.reduce((s, r) => s + r.cgst, 0))}
-                  </span>
-                  <span className="w-12 text-right tabular-nums">
-                    {formatINR(gstSlabs.reduce((s, r) => s + r.sgst, 0))}
-                  </span>
-                  <span className="w-14 text-right tabular-nums">
-                    {formatINR(grandTotal)}
-                  </span>
-                </div>
-
-                <div className="my-1.5 border-t border-dashed border-gray-400" />
-
-                <div className="text-[10px] space-y-0.5">
-                  <div className="flex justify-between">
-                    <span>Taxable Value:</span>
-                    <span className="tabular-nums">{formatINR(taxableValue)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total GST:</span>
-                    <span className="tabular-nums">{formatINR(totalGst)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold">
-                    <span>Invoice Total:</span>
-                    <span className="tabular-nums">{formatINR(grandTotal)}</span>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="my-1.5 border-t border-dashed border-gray-400" />
-
-            {/* Payment & Footer */}
-            <div className="mt-2 text-center text-[9px] text-gray-500">
-              Goods once sold will not be taken back unless covered under applicable return policy.
-            </div>
-            <div className="text-center text-[9px] text-gray-500">
-              Amount shown above is inclusive of GST.
-            </div>
-            <div className="text-center text-[9px] text-gray-500">
-              This is a computer generated invoice.
-            </div>
-            <div className="mt-2 text-center text-[10px] font-medium">
-              Thank You for shopping with us.
-            </div>
-          </div>
+          <ReceiptPrintContent receipt={receipt} className="mt-6" />
 
           {/* Action Buttons */}
           <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -536,12 +193,12 @@ function SuccessPage() {
               label="Save PDF"
               onClick={downloadReceipt}
             />
-            {delivery === "Home" && (
+            {receipt.delivery === "Home" && (
               <Action
                 color="var(--brand-orange)"
                 icon={Bike}
                 label="Assign Rider"
-                onClick={() => navigate({ to: "/delivery", search: { orderId } })}
+                onClick={() => navigate({ to: "/delivery", search: { orderId: checkout?.orderObjectId ?? receipt.orderId } })}
               />
             )}
             <Action color="var(--brand-red)" icon={Plus} label="New Order" to="/new-order" />

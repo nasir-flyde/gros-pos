@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import type { OrderItem, PosOrder } from "./order-api";
 
 export interface CartProduct {
   _id: string;
@@ -26,18 +27,23 @@ type CheckoutInfo = {
   orderObjectId: string;
   total: number;
   receiptData?: Record<string, unknown>;
+  receiptStatus?: "generated" | "unavailable" | "pending_fulfillment";
+  receiptWarning?: string;
   customer: PosCartCustomer | null;
 };
 
 type CartCtx = {
   items: CartItem[];
   customer: PosCartCustomer | null;
+  activeOrderId: string | null;
   add: (p: CartProduct) => void;
   inc: (id: string) => void;
   dec: (id: string) => void;
   remove: (id: string) => void;
   clear: () => void;
   setCustomer: (c: PosCartCustomer | null) => void;
+  setActiveOrderId: (orderId: string | null) => void;
+  loadHeldOrder: (order: PosOrder) => void;
   subtotal: number;
   discount: number;
   afterDisc: number;
@@ -52,6 +58,7 @@ const Ctx = createContext<CartCtx | null>(null);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState<PosCartCustomer | null>(null);
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [lastCheckout, setLastCheckout] = useState<CheckoutInfo | null>(null);
 
   const add = (p: CartProduct) =>
@@ -72,6 +79,39 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clear = () => {
     setItems([]);
     setCustomer(null);
+    setActiveOrderId(null);
+  };
+
+  const loadHeldOrder = (order: PosOrder) => {
+    const nextItems = (order.items ?? []).map((item: OrderItem) => ({
+      product: {
+        _id:
+          typeof item.productVariantId === "string"
+            ? item.productVariantId
+            : item.productVariantId?._id || item.sku || item.variantName || item._id,
+        name:
+          item.variantName ||
+          (typeof item.productVariantId === "object" ? item.productVariantId?.variantName : "") ||
+          "Variant",
+        weight: typeof item.productVariantId === "object" ? item.productVariantId?.unitType || "" : "",
+        mrp: item.unitPrice,
+        price: item.unitPrice,
+        taxRate: item.taxRate || 0,
+      },
+      qty: item.quantity,
+    }));
+
+    setItems(nextItems);
+    setActiveOrderId(order._id);
+    setCustomer(
+      order.customerId
+        ? {
+            _id: order.customerId._id,
+            name: order.customerId.name,
+            mobile: order.customerId.mobile,
+          }
+        : null,
+    );
   };
 
   const { subtotal, discount, afterDisc, tax, count } = useMemo(() => {
@@ -100,12 +140,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       value={{
         items,
         customer,
+        activeOrderId,
         add,
         inc,
         dec,
         remove,
         clear,
         setCustomer,
+        setActiveOrderId,
+        loadHeldOrder,
         subtotal,
         discount,
         afterDisc,

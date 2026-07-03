@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { orderApi, type PosOrder } from "@/lib/order-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { formatINR } from "@/lib/utils";
+import { fetchAndPrintOrderReceipt } from "@/lib/order-receipt";
 import {
   ShoppingCart,
   Bike,
@@ -16,7 +18,9 @@ import {
   IndianRupee,
   Smartphone,
   Loader2,
+  Printer,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_pos/")({
   head: () => ({
@@ -46,42 +50,37 @@ function HomePage() {
   const storeId = scopes.find((s) => s.type === "store")?.id;
   const storeName = scopes.find((s) => s.type === "store")?.name ?? "Store";
   const cashierName = user ? `${user.firstName} ${user.lastName}` : "Cashier";
+  const businessDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const dateFrom = useMemo(() => new Date(`${businessDate}T00:00:00`).toISOString(), [businessDate]);
+  const dateTo = useMemo(() => new Date(`${businessDate}T23:59:59`).toISOString(), [businessDate]);
 
-  const { data: recentRes, isLoading } = useQuery({
-    queryKey: ["recent-orders", storeId],
-    queryFn: () =>
-      orderApi.list({
-        limit: 10,
-        sort: "-createdAt",
-        ...(storeId ? { storeId } : {}),
-      }),
+  const { data: summaryRes } = useQuery({
+    queryKey: ["order-summary", storeId, dateFrom, dateTo],
+    queryFn: () => orderApi.getSummary({ storeId, dateFrom, dateTo }),
+    enabled: !!storeId,
     staleTime: 15_000,
   });
 
-  const recentOrders: PosOrder[] = recentRes?.data ?? [];
+  const { data: recentRes, isLoading } = useQuery({
+    queryKey: ["recent-orders", storeId, dateFrom, dateTo],
+    queryFn: () =>
+      orderApi.list({
+        limit: 20,
+        dateFrom,
+        dateTo,
+        ...(storeId ? { storeId } : {}),
+      }),
+    enabled: !!storeId,
+    staleTime: 15_000,
+  });
 
-  const todaySales = recentOrders
-    .filter((o) => {
-      const today = new Date();
-      const created = new Date(o.createdAt);
-      return (
-        created.getDate() === today.getDate() &&
-        created.getMonth() === today.getMonth() &&
-        created.getFullYear() === today.getFullYear()
-      );
-    })
-    .reduce((sum, o) => sum + o.grandTotal, 0);
-
-  const completedToday = recentOrders.filter((o) => {
-    const today = new Date();
-    const created = new Date(o.createdAt);
-    return (
-      o.status === "COMPLETED" &&
-      created.getDate() === today.getDate() &&
-      created.getMonth() === today.getMonth() &&
-      created.getFullYear() === today.getFullYear()
-    );
-  }).length;
+  const recentOrders = useMemo(
+    () => ((recentRes?.data ?? []) as PosOrder[]).filter((order) => order.orderType === "POS"),
+    [recentRes?.data],
+  );
+  const summary = summaryRes?.data;
+  const todaySales = summary?.revenue ?? 0;
+  const completedToday = summary?.completedOrders ?? 0;
 
   const paymentBreakdown = recentOrders.reduce(
     (acc, o) => {
@@ -94,6 +93,23 @@ function HomePage() {
 
   const todaySalesFormatted = formatINR(todaySales);
   const totalQty = recentOrders.length;
+  const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
+  const printReceiptMutation = useMutation({
+    mutationFn: async (order: PosOrder) => {
+      setPrintingOrderId(order._id);
+      return fetchAndPrintOrderReceipt(order);
+    },
+    onError: (error: unknown) => {
+      const message =
+        typeof error === "object" && error && "message" in error
+          ? String(error.message)
+          : "Receipt could not be printed.";
+      toast.error(message);
+    },
+    onSettled: () => {
+      setPrintingOrderId(null);
+    },
+  });
 
   return (
     <div className="h-full overflow-y-auto p-5">
@@ -145,12 +161,13 @@ function HomePage() {
                 <th className="px-4 py-3 text-left">Type</th>
                 <th className="px-4 py-3 text-right">Amount</th>
                 <th className="px-4 py-3 text-right">Time</th>
+                <th className="px-4 py-3 text-right">Receipt</th>
               </tr>
             </thead>
             <tbody>
               {recentOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     {isLoading ? "Loading…" : "No orders yet today."}
                   </td>
                 </tr>
@@ -181,6 +198,20 @@ function HomePage() {
                         minute: "2-digit",
                         hour12: true,
                       })}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => printReceiptMutation.mutate(o)}
+                        disabled={printReceiptMutation.isPending && printingOrderId === o._id}
+                        className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-blue)] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                      >
+                        {printReceiptMutation.isPending && printingOrderId === o._id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Printer className="h-4 w-4" />
+                        )}
+                        Print
+                      </button>
                     </td>
                   </tr>
                 ))

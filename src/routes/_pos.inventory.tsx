@@ -62,9 +62,27 @@ function InventoryPage() {
       <p className="text-sm font-semibold text-muted-foreground">Quick view · {storeName}</p>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <Action to="/request-stock" color="var(--brand-blue)" icon={Truck} label="Request Stock" />
-        <Action to="/transfer-stock" color="var(--brand-orange)" icon={ArrowLeftRight} label="Transfer Stock" />
-        <Action to="/purchase-request" color="var(--brand-green)" icon={FileText} label="Purchase Request" />
+        <Action
+          to="/request-stock"
+          color="var(--brand-blue)"
+          icon={Truck}
+          label="Request Stock"
+          detail="Create live warehouse-to-store stock requests"
+        />
+        <Action
+          to="/transfer-stock"
+          color="var(--brand-orange)"
+          icon={ArrowLeftRight}
+          label="Transfer Stock"
+          detail="Instant store transfers with recent movement history"
+        />
+        <Action
+          to="/purchase-request"
+          color="var(--brand-green)"
+          icon={FileText}
+          label="Purchase Planning"
+          detail="Vendor planning view from live low-stock catalog data"
+        />
       </div>
 
       <div className="mt-4 overflow-x-auto">
@@ -128,21 +146,26 @@ function CategoryChip({
 function Action({
   icon: Icon,
   label,
+  detail,
   color,
   to,
 }: {
   icon: typeof Truck;
   label: string;
+  detail: string;
   color: string;
   to: string;
 }) {
   return (
     <Link
       to={to}
-      className="tap-target-lg flex items-center justify-center gap-2 rounded-2xl text-base font-extrabold text-white active:scale-[0.98]"
+      className="tap-target-lg rounded-2xl px-4 py-4 text-white active:scale-[0.98]"
       style={{ backgroundColor: color }}
     >
-      <Icon className="h-5 w-5" /> {label}
+      <div className="flex items-center gap-2 text-base font-extrabold">
+        <Icon className="h-5 w-5" /> {label}
+      </div>
+      <div className="mt-1 text-xs font-semibold text-white/85">{detail}</div>
     </Link>
   );
 }

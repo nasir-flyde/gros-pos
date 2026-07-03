@@ -1,15 +1,55 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCart } from "@/lib/cart-context";
+import { orderApi } from "@/lib/order-api";
 import { formatINR } from "@/lib/utils";
 import { Plus, Minus, Trash2, Pause, ArrowRight, Package } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export function CartPanel() {
-  const { items, inc, dec, remove, subtotal, discount, afterDisc, tax, count, clear, customer } =
-    useCart();
+  const {
+    items,
+    inc,
+    dec,
+    remove,
+    subtotal,
+    discount,
+    afterDisc,
+    tax,
+    count,
+    clear,
+    customer,
+    activeOrderId,
+    setActiveOrderId,
+  } = useCart();
   // GST is inclusive in afterDisc — do NOT add tax again
   const cartTotal = afterDisc;
   const navigate = useNavigate();
+  const [holding, setHolding] = useState(false);
+
+  const holdCurrentOrder = async () => {
+    if (!activeOrderId) {
+      toast.error("Backend hold is only available for an existing resumed order right now.");
+      return;
+    }
+
+    try {
+      setHolding(true);
+      await orderApi.hold(activeOrderId);
+      clear();
+      setActiveOrderId(null);
+      toast.success("Order placed on hold");
+      navigate({ to: "/hold" });
+    } catch (error) {
+      const message =
+        typeof error === "object" && error && "message" in error
+          ? String(error.message)
+          : "Failed to hold order";
+      toast.error(message);
+    } finally {
+      setHolding(false);
+    }
+  };
 
   return (
     <aside className="flex w-full max-w-[420px] shrink-0 flex-col overflow-hidden border-l-2 bg-card lg:w-[38%]">
@@ -105,10 +145,11 @@ export function CartPanel() {
         </button>
         <button
           disabled={items.length === 0}
+          onClick={holdCurrentOrder}
           className="tap-target-lg grid place-items-center rounded-xl bg-[var(--brand-orange)] px-3 font-bold text-white disabled:opacity-40 active:scale-[0.97]"
           aria-label="Hold order"
         >
-          <Pause className="h-5 w-5" />
+          <Pause className={"h-5 w-5 " + (holding ? "animate-pulse" : "")} />
         </button>
         <button
           disabled={items.length === 0}
