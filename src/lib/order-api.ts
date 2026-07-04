@@ -137,6 +137,17 @@ export interface OrderTracking {
   } | null;
 }
 
+export interface CloseCounterResult {
+  organizationId?: string | null;
+  storeId: string;
+  businessDate: string;
+  expectedAmount: number;
+  actualAmount: number;
+  variance: number;
+  closedBy?: string;
+  closedAt: string;
+}
+
 interface PaginationMeta {
   page: number;
   limit: number;
@@ -165,6 +176,14 @@ export const orderApi = {
 
   getTracking: (id: string) =>
     api.get<unknown, ApiResponse<OrderTracking>>(`/orders/${id}/tracking`),
+
+  closeCounter: (payload: {
+    storeId: string;
+    businessDate: string;
+    expectedAmount: number;
+    actualAmount: number;
+    variance: number;
+  }) => api.post<unknown, ApiResponse<CloseCounterResult>>("/pos/close-counter", payload),
 
   pickupConfirm: (id: string) =>
     api.post<unknown, ApiResponse<{ order: PosOrder; receipt: Record<string, unknown> | null; receiptStatus: string }>>(

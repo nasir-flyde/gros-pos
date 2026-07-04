@@ -27,6 +27,7 @@ import { Route as PosDeliveryRouteImport } from './routes/_pos.delivery'
 import { Route as PosCustomersRouteImport } from './routes/_pos.customers'
 import { Route as PosCheckoutRouteImport } from './routes/_pos.checkout'
 import { Route as PosCashRouteImport } from './routes/_pos.cash'
+import { Route as PosCustomersCustomerIdRouteImport } from './routes/_pos.customers.$customerId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -117,6 +118,11 @@ const PosCashRoute = PosCashRouteImport.update({
   path: '/cash',
   getParentRoute: () => PosRoute,
 } as any)
+const PosCustomersCustomerIdRoute = PosCustomersCustomerIdRouteImport.update({
+  id: '/$customerId',
+  path: '/$customerId',
+  getParentRoute: () => PosCustomersRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PosIndexRoute
@@ -124,7 +130,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/cash': typeof PosCashRoute
   '/checkout': typeof PosCheckoutRoute
-  '/customers': typeof PosCustomersRoute
+  '/customers': typeof PosCustomersRouteWithChildren
   '/delivery': typeof PosDeliveryRoute
   '/hold': typeof PosHoldRoute
   '/inventory': typeof PosInventoryRoute
@@ -136,13 +142,14 @@ export interface FileRoutesByFullPath {
   '/scanner': typeof PosScannerRoute
   '/success': typeof PosSuccessRoute
   '/transfer-stock': typeof PosTransferStockRoute
+  '/customers/$customerId': typeof PosCustomersCustomerIdRoute
 }
 export interface FileRoutesByTo {
   '/change-password': typeof ChangePasswordRoute
   '/login': typeof LoginRoute
   '/cash': typeof PosCashRoute
   '/checkout': typeof PosCheckoutRoute
-  '/customers': typeof PosCustomersRoute
+  '/customers': typeof PosCustomersRouteWithChildren
   '/delivery': typeof PosDeliveryRoute
   '/hold': typeof PosHoldRoute
   '/inventory': typeof PosInventoryRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByTo {
   '/success': typeof PosSuccessRoute
   '/transfer-stock': typeof PosTransferStockRoute
   '/': typeof PosIndexRoute
+  '/customers/$customerId': typeof PosCustomersCustomerIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -163,7 +171,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_pos/cash': typeof PosCashRoute
   '/_pos/checkout': typeof PosCheckoutRoute
-  '/_pos/customers': typeof PosCustomersRoute
+  '/_pos/customers': typeof PosCustomersRouteWithChildren
   '/_pos/delivery': typeof PosDeliveryRoute
   '/_pos/hold': typeof PosHoldRoute
   '/_pos/inventory': typeof PosInventoryRoute
@@ -176,6 +184,7 @@ export interface FileRoutesById {
   '/_pos/success': typeof PosSuccessRoute
   '/_pos/transfer-stock': typeof PosTransferStockRoute
   '/_pos/': typeof PosIndexRoute
+  '/_pos/customers/$customerId': typeof PosCustomersCustomerIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
     | '/scanner'
     | '/success'
     | '/transfer-stock'
+    | '/customers/$customerId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/change-password'
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
     | '/success'
     | '/transfer-stock'
     | '/'
+    | '/customers/$customerId'
   id:
     | '__root__'
     | '/_pos'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '/_pos/success'
     | '/_pos/transfer-stock'
     | '/_pos/'
+    | '/_pos/customers/$customerId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -372,13 +384,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PosCashRouteImport
       parentRoute: typeof PosRoute
     }
+    '/_pos/customers/$customerId': {
+      id: '/_pos/customers/$customerId'
+      path: '/$customerId'
+      fullPath: '/customers/$customerId'
+      preLoaderRoute: typeof PosCustomersCustomerIdRouteImport
+      parentRoute: typeof PosCustomersRoute
+    }
   }
 }
+
+interface PosCustomersRouteChildren {
+  PosCustomersCustomerIdRoute: typeof PosCustomersCustomerIdRoute
+}
+
+const PosCustomersRouteChildren: PosCustomersRouteChildren = {
+  PosCustomersCustomerIdRoute: PosCustomersCustomerIdRoute,
+}
+
+const PosCustomersRouteWithChildren = PosCustomersRoute._addFileChildren(
+  PosCustomersRouteChildren,
+)
 
 interface PosRouteChildren {
   PosCashRoute: typeof PosCashRoute
   PosCheckoutRoute: typeof PosCheckoutRoute
-  PosCustomersRoute: typeof PosCustomersRoute
+  PosCustomersRoute: typeof PosCustomersRouteWithChildren
   PosDeliveryRoute: typeof PosDeliveryRoute
   PosHoldRoute: typeof PosHoldRoute
   PosInventoryRoute: typeof PosInventoryRoute
@@ -396,7 +427,7 @@ interface PosRouteChildren {
 const PosRouteChildren: PosRouteChildren = {
   PosCashRoute: PosCashRoute,
   PosCheckoutRoute: PosCheckoutRoute,
-  PosCustomersRoute: PosCustomersRoute,
+  PosCustomersRoute: PosCustomersRouteWithChildren,
   PosDeliveryRoute: PosDeliveryRoute,
   PosHoldRoute: PosHoldRoute,
   PosInventoryRoute: PosInventoryRoute,

@@ -2,23 +2,31 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { orderApi, type PosOrder } from "@/lib/order-api";
+import { productApi } from "@/lib/product-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { formatINR } from "@/lib/utils";
 import { fetchAndPrintOrderReceipt } from "@/lib/order-receipt";
 import {
-  ShoppingCart,
+  buildAverageBasket,
+  buildInventoryAlertCounts,
+  buildPaymentTotals,
+  buildPendingFulfillmentCounts,
+} from "@/lib/report-metrics";
+import {
+  AlertTriangle,
   Bike,
-  ShoppingBag,
-  ScanLine,
-  RotateCcw,
-  UserSearch,
-  TrendingUp,
-  Package2,
-  Wallet,
   IndianRupee,
-  Smartphone,
   Loader2,
+  Package2,
   Printer,
+  RotateCcw,
+  ScanLine,
+  ShoppingCart,
+  ShoppingBag,
+  Smartphone,
+  TrendingUp,
+  UserSearch,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -65,7 +73,7 @@ function HomePage() {
     queryKey: ["recent-orders", storeId, dateFrom, dateTo],
     queryFn: () =>
       orderApi.list({
-        limit: 20,
+        limit: 100,
         dateFrom,
         dateTo,
         ...(storeId ? { storeId } : {}),
@@ -74,25 +82,96 @@ function HomePage() {
     staleTime: 15_000,
   });
 
+  const { data: queueRes } = useQuery({
+    queryKey: ["homepage-fulfillment-queue", storeId],
+    queryFn: () =>
+      orderApi.list({
+        limit: 100,
+        ...(storeId ? { storeId } : {}),
+      }),
+    enabled: !!storeId,
+    staleTime: 15_000,
+  });
+
+  const { data: inventoryData } = useQuery({
+    queryKey: ["homepage-inventory-alerts", storeId],
+    queryFn: () => productApi.getJoinedCatalog({ storeId }),
+    enabled: !!storeId,
+    staleTime: 30_000,
+  });
+
   const recentOrders = useMemo(
     () => ((recentRes?.data ?? []) as PosOrder[]).filter((order) => order.orderType === "POS"),
     [recentRes?.data],
   );
+  const displayedRecentOrders = recentOrders.slice(0, 20);
+  const queueOrders = useMemo(() => (queueRes?.data ?? []) as PosOrder[], [queueRes?.data]);
+  const inventoryVariants = inventoryData?.variants ?? [];
   const summary = summaryRes?.data;
   const todaySales = summary?.revenue ?? 0;
   const completedToday = summary?.completedOrders ?? 0;
-
-  const paymentBreakdown = recentOrders.reduce(
-    (acc, o) => {
-      const mode = o.paymentMode || "OTHER";
-      acc[mode] = (acc[mode] || 0) + o.grandTotal;
-      return acc;
+  const paymentTotals = useMemo(() => buildPaymentTotals(recentOrders), [recentOrders]);
+  const avgBasket = buildAverageBasket(summary?.averageOrderValue, todaySales, completedToday);
+  const pendingCounts = useMemo(() => buildPendingFulfillmentCounts(queueOrders), [queueOrders]);
+  const inventoryAlerts = useMemo(() => buildInventoryAlertCounts(inventoryVariants), [inventoryVariants]);
+  const kpis = [
+    {
+      label: "Today's Sales",
+      value: formatINR(todaySales),
+      subtitle: "Revenue booked today",
+      icon: TrendingUp,
+      color: "var(--brand-green)",
     },
-    {} as Record<string, number>,
-  );
-
-  const todaySalesFormatted = formatINR(todaySales);
-  const totalQty = recentOrders.length;
+    {
+      label: "Orders Processed",
+      value: completedToday.toString(),
+      subtitle: "Completed POS orders today",
+      icon: ShoppingBag,
+      color: "var(--brand-blue)",
+    },
+    {
+      label: "Pending Deliveries",
+      value: pendingCounts.pendingDeliveries.toString(),
+      subtitle: "Active home-delivery queue",
+      icon: Bike,
+      color: "var(--brand-orange)",
+    },
+    {
+      label: "Pending Pickups",
+      value: pendingCounts.pendingPickups.toString(),
+      subtitle: "Ready / in-progress pickups",
+      icon: Package2,
+      color: "var(--brand-blue)",
+    },
+    {
+      label: "Cash Collected",
+      value: formatINR(paymentTotals.cashCollected),
+      subtitle: "Cash payments today",
+      icon: IndianRupee,
+      color: "var(--brand-green)",
+    },
+    {
+      label: "Online Payments",
+      value: formatINR(paymentTotals.onlinePayments),
+      subtitle: "UPI + Card + Wallet",
+      icon: Smartphone,
+      color: "var(--brand-blue)",
+    },
+    {
+      label: "Inventory Alerts",
+      value: inventoryAlerts.totalAlerts.toString(),
+      subtitle: `${inventoryAlerts.criticalCount} critical · ${inventoryAlerts.lowCount} low`,
+      icon: AlertTriangle,
+      color: "var(--brand-red)",
+    },
+    {
+      label: "Avg Basket",
+      value: formatINR(avgBasket),
+      subtitle: "Average order value today",
+      icon: Wallet,
+      color: "var(--brand-orange)",
+    },
+  ] as const;
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
   const printReceiptMutation = useMutation({
     mutationFn: async (order: PosOrder) => {
@@ -119,17 +198,16 @@ function HomePage() {
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <KPI label="Today's Sales" value={todaySalesFormatted} icon={TrendingUp} color="var(--brand-green)" />
-        <KPI label="Orders Today" value={completedToday.toString()} icon={ShoppingBag} color="var(--brand-blue)" />
-        <KPI label="Recent Orders" value={totalQty.toString()} icon={Package2} color="var(--brand-orange)" />
-        <KPI
-          label="Top Payment"
-          value={
-            Object.entries(paymentBreakdown).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—"
-          }
-          icon={IndianRupee}
-          color="var(--brand-blue)"
-        />
+        {kpis.map((kpi) => (
+          <KPI
+            key={kpi.label}
+            label={kpi.label}
+            value={kpi.value}
+            subtitle={kpi.subtitle}
+            icon={kpi.icon}
+            color={kpi.color}
+          />
+        ))}
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
@@ -165,14 +243,14 @@ function HomePage() {
               </tr>
             </thead>
             <tbody>
-              {recentOrders.length === 0 ? (
+              {displayedRecentOrders.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     {isLoading ? "Loading…" : "No orders yet today."}
                   </td>
                 </tr>
               ) : (
-                recentOrders.map((o) => (
+                displayedRecentOrders.map((o) => (
                   <tr key={o._id} className="border-t">
                     <td className="whitespace-nowrap px-4 py-3 font-extrabold tabular-nums">
                       {o.orderNumber}
@@ -185,7 +263,7 @@ function HomePage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="rounded-md bg-[var(--secondary)] px-2 py-0.5 text-xs font-bold">
-                        {o.paymentMode}
+                        {o.paymentMode || "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs font-semibold">{o.deliveryType}</td>
@@ -227,11 +305,13 @@ function HomePage() {
 function KPI({
   label,
   value,
+  subtitle,
   icon: Icon,
   color,
 }: {
   label: string;
   value: string;
+  subtitle?: string;
   icon: typeof TrendingUp;
   color: string;
 }) {
@@ -246,6 +326,7 @@ function KPI({
         </span>
       </div>
       <div className="mt-2 text-2xl font-extrabold tabular-nums">{value}</div>
+      {subtitle ? <div className="mt-1 text-sm font-semibold text-muted-foreground">{subtitle}</div> : null}
     </div>
   );
 }

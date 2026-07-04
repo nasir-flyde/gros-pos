@@ -1,10 +1,10 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { customerApi, type PosCustomer } from "@/lib/customer-api";
 import { formatINR } from "@/lib/utils";
 import { useCart, type PosCartCustomer } from "@/lib/cart-context";
-import { Search, UserPlus, Delete, ArrowRight, Edit3, Loader2 } from "lucide-react";
+import { Search, UserPlus, Delete, ArrowRight, Loader2, Eye } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/customers")({
   head: () => ({ meta: [{ title: "Customer Lookup — CHHOTA BAZAAR POS" }] }),
@@ -15,8 +15,11 @@ function CustomersPage() {
   const [mobile, setMobile] = useState("");
   const [adding, setAdding] = useState(false);
   const { setCustomer } = useCart();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  if (pathname !== "/customers") {
+    return <Outlet />;
+  }
 
   const { data: searchRes, isFetching } = useQuery({
     queryKey: ["pos-customers", mobile],
@@ -105,37 +108,7 @@ function CustomersPage() {
           <ul className="grid gap-3">
             {results.map((c) => (
               <li key={c._id}>
-                <button
-                  onClick={() => select(c)}
-                  className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 rounded-2xl border-2 bg-card p-4 text-left transition-all hover:border-[var(--brand-blue)] active:scale-[0.99]"
-                >
-                  <div className="grid h-14 w-14 place-items-center rounded-xl bg-[var(--brand-blue)] text-lg font-extrabold text-white">
-                    {c.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-lg font-extrabold leading-tight">{c.name}</div>
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      {c.mobile} · {c.area || "—"} {c.pincode || ""}
-                    </div>
-                    <div className="mt-1 flex gap-3 text-xs font-bold">
-                      <span className="rounded-md bg-[var(--secondary)] px-2 py-0.5">
-                        {c.ordersCount} orders
-                      </span>
-                      <span className="rounded-md bg-[var(--brand-green)]/15 px-2 py-0.5 text-[var(--brand-green)]">
-                        {formatINR(c.totalSpend)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="tap-target grid place-items-center rounded-xl bg-[var(--brand-green)] px-3 text-white">
-                      <ArrowRight className="h-5 w-5" strokeWidth={3} />
-                    </span>
-                  </div>
-                </button>
+                <CustomerCard customer={c} onSelect={() => select(c)} />
               </li>
             ))}
             {results.length === 0 && !isFetching && (
@@ -152,6 +125,59 @@ function CustomersPage() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function CustomerCard({
+  customer,
+  onSelect,
+}: {
+  customer: PosCustomer;
+  onSelect: () => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border-2 bg-card">
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 p-4">
+        <div className="grid h-14 w-14 place-items-center rounded-xl bg-[var(--brand-blue)] text-lg font-extrabold text-white">
+          {customer.name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .slice(0, 2)}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-lg font-extrabold leading-tight">{customer.name}</div>
+          <div className="text-xs font-semibold text-muted-foreground">
+            {customer.mobile} · {customer.area || "—"} {customer.pincode || ""}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-3 text-xs font-bold">
+            <span className="rounded-md bg-[var(--secondary)] px-2 py-0.5">
+              {customer.ordersCount} orders
+            </span>
+            <span className="rounded-md bg-[var(--brand-green)]/15 px-2 py-0.5 text-[var(--brand-green)]">
+              {formatINR(customer.totalSpend)}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2 border-t bg-[var(--secondary)]/40 px-4 py-3">
+        <button
+          onClick={onSelect}
+          className="tap-target flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--brand-green)] px-3 text-sm font-extrabold text-white active:scale-[0.99]"
+        >
+          Select Customer
+          <ArrowRight className="h-4 w-4" strokeWidth={3} />
+        </button>
+        <Link
+          to="/customers/$customerId"
+          params={{ customerId: customer._id }}
+          className="tap-target inline-flex items-center justify-center gap-2 rounded-xl border bg-card px-4 text-sm font-extrabold text-foreground active:scale-[0.99]"
+        >
+          <Eye className="h-4 w-4" />
+          View
+        </Link>
+      </div>
     </div>
   );
 }

@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAverageBasket,
   buildCashMetrics,
   buildHourlySales,
+  buildInventoryAlertCounts,
+  buildPaymentTotals,
   buildPaymentBreakdown,
+  buildPendingFulfillmentCounts,
   buildStatusBreakdown,
 } from "./report-metrics.ts";
 import type { PosOrder } from "./order-api.ts";
+import type { PosJoinedVariant } from "./product-api.ts";
 
 const baseOrders: PosOrder[] = [
   {
@@ -60,5 +65,133 @@ describe("report metrics", () => {
     expect(buildHourlySales(baseOrders).find((point) => point.hour === "08")?.sales).toBe(100);
     expect(buildPaymentBreakdown(baseOrders).find((point) => point.name === "CARD")?.value).toBe(200);
     expect(buildStatusBreakdown(baseOrders).find((point) => point.name === "REFUNDED")?.value).toBe(1);
+  });
+
+  it("separates cash and online payment totals", () => {
+    expect(
+      buildPaymentTotals([
+        ...baseOrders,
+        {
+          ...baseOrders[0],
+          _id: "3",
+          orderNumber: "ORD-3",
+          grandTotal: 150,
+          paymentMode: "UPI",
+        },
+      ]),
+    ).toEqual({
+      cashCollected: 100,
+      onlinePayments: 350,
+    });
+  });
+
+  it("calculates average basket with safe fallback behavior", () => {
+    expect(buildAverageBasket(240, 500, 2)).toBe(240);
+    expect(buildAverageBasket(undefined, 756, 3)).toBe(252);
+    expect(buildAverageBasket(undefined, 756, 0)).toBe(0);
+  });
+
+  it("counts critical and low stock inventory alerts", () => {
+    const variants: PosJoinedVariant[] = [
+      {
+        _id: "v1",
+        variantName: "A",
+        productName: "A",
+        categoryName: "Cat",
+        categoryId: "cat",
+        sku: "A",
+        sellingMode: "FIXED",
+        unitValue: "1",
+        unitType: "pc",
+        mrp: 10,
+        price: 10,
+        barcode: "1",
+        barcodes: ["1"],
+        taxRate: 0,
+        quantityAvailable: 8,
+      },
+      {
+        _id: "v2",
+        variantName: "B",
+        productName: "B",
+        categoryName: "Cat",
+        categoryId: "cat",
+        sku: "B",
+        sellingMode: "FIXED",
+        unitValue: "1",
+        unitType: "pc",
+        mrp: 10,
+        price: 10,
+        barcode: "2",
+        barcodes: ["2"],
+        taxRate: 0,
+        quantityAvailable: 15,
+      },
+      {
+        _id: "v3",
+        variantName: "C",
+        productName: "C",
+        categoryName: "Cat",
+        categoryId: "cat",
+        sku: "C",
+        sellingMode: "FIXED",
+        unitValue: "1",
+        unitType: "pc",
+        mrp: 10,
+        price: 10,
+        barcode: "3",
+        barcodes: ["3"],
+        taxRate: 0,
+        quantityAvailable: 25,
+      },
+    ];
+
+    expect(buildInventoryAlertCounts(variants)).toEqual({
+      criticalCount: 1,
+      lowCount: 1,
+      totalAlerts: 2,
+    });
+  });
+
+  it("counts only active pending delivery and pickup orders", () => {
+    expect(
+      buildPendingFulfillmentCounts([
+        {
+          ...baseOrders[0],
+          _id: "delivery-1",
+          orderNumber: "ORD-D1",
+          status: "PLACED",
+          deliveryType: "HOME",
+          fulfillmentStatus: "OUT_FOR_DELIVERY",
+        },
+        {
+          ...baseOrders[0],
+          _id: "pickup-1",
+          orderNumber: "ORD-P1",
+          status: "PLACED",
+          deliveryType: "PICKUP",
+          fulfillmentStatus: "READY_FOR_PICKUP",
+        },
+        {
+          ...baseOrders[0],
+          _id: "delivery-2",
+          orderNumber: "ORD-D2",
+          status: "COMPLETED",
+          deliveryType: "HOME",
+          fulfillmentStatus: "DELIVERED",
+        },
+        {
+          ...baseOrders[0],
+          _id: "pickup-2",
+          orderNumber: "ORD-P2",
+          status: "REFUNDED",
+          deliveryType: "PICKUP",
+          fulfillmentStatus: "CANCELLED",
+        },
+      ]),
+    ).toEqual({
+      pendingDeliveries: 1,
+      pendingPickups: 1,
+    });
   });
 });
