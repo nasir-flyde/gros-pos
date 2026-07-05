@@ -1,21 +1,27 @@
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { customerApi, type PosCustomer } from "@/lib/customer-api";
 import { formatINR } from "@/lib/utils";
 import { useCart, type PosCartCustomer } from "@/lib/cart-context";
 import { Search, UserPlus, Delete, ArrowRight, Loader2, Eye } from "lucide-react";
+import { z } from "zod";
 
 export const Route = createFileRoute("/_pos/customers")({
+  validateSearch: z.object({
+    returnTo: z.enum(["/new-order", "/checkout"]).optional(),
+  }),
   head: () => ({ meta: [{ title: "Customer Lookup — CHHOTA BAZAAR POS" }] }),
   component: CustomersPage,
 });
 
-function CustomersPage() {
+export function CustomersPage() {
   const [mobile, setMobile] = useState("");
   const [adding, setAdding] = useState(false);
   const { setCustomer } = useCart();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const navigate = useNavigate();
+  const { returnTo } = Route.useSearch();
 
   if (pathname !== "/customers") {
     return <Outlet />;
@@ -33,7 +39,10 @@ function CustomersPage() {
   const press = (d: string) => setMobile((m) => (m.length < 10 ? m + d : m));
   const back = () => setMobile((m) => m.slice(0, -1));
 
-  const goBack = () => window.history.back();
+  const returnToOrigin = () => {
+    if (!returnTo) return;
+    navigate({ to: returnTo });
+  };
 
   if (adding)
     return (
@@ -41,7 +50,7 @@ function CustomersPage() {
         onCancel={() => setAdding(false)}
         onSaved={(c) => {
           setCustomer(c);
-          goBack();
+          returnToOrigin();
         }}
       />
     );
@@ -54,7 +63,7 @@ function CustomersPage() {
       area: c.area,
     };
     setCustomer(cartCustomer);
-    goBack();
+    returnToOrigin();
   };
 
   return (
@@ -108,7 +117,7 @@ function CustomersPage() {
           <ul className="grid gap-3">
             {results.map((c) => (
               <li key={c._id}>
-                <CustomerCard customer={c} onSelect={() => select(c)} />
+                <CustomerCard customer={c} onSelect={() => select(c)} returnTo={returnTo} />
               </li>
             ))}
             {results.length === 0 && !isFetching && (
@@ -132,9 +141,11 @@ function CustomersPage() {
 function CustomerCard({
   customer,
   onSelect,
+  returnTo,
 }: {
   customer: PosCustomer;
   onSelect: () => void;
+  returnTo?: "/new-order" | "/checkout";
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border-2 bg-card">
@@ -172,6 +183,7 @@ function CustomerCard({
         <Link
           to="/customers/$customerId"
           params={{ customerId: customer._id }}
+          search={returnTo ? { returnTo } : {}}
           className="tap-target inline-flex items-center justify-center gap-2 rounded-xl border bg-card px-4 text-sm font-extrabold text-foreground active:scale-[0.99]"
         >
           <Eye className="h-4 w-4" />

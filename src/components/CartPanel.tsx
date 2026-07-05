@@ -64,6 +64,7 @@ export function CartPanel() {
         </div>
         <Link
           to="/customers"
+          search={{ returnTo: "/new-order" }}
           className="tap-target flex items-center justify-center rounded-xl bg-white/15 px-3 py-1.5 text-sm font-bold text-white active:scale-[0.97]"
         >
           {customer ? customer.name.split(" ")[0] : "+ Customer"}

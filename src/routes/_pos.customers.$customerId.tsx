@@ -1,19 +1,25 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { customerApi, type PosCustomer } from "@/lib/customer-api";
 import { orderApi, type PosOrder } from "@/lib/order-api";
 import { formatINR } from "@/lib/utils";
 import { useCart, type PosCartCustomer } from "@/lib/cart-context";
 import { ArrowLeft, ArrowRight, CalendarDays, Loader2, ReceiptIndianRupee, ShoppingBag } from "lucide-react";
+import { z } from "zod";
 
 export const Route = createFileRoute("/_pos/customers/$customerId")({
+  validateSearch: z.object({
+    returnTo: z.enum(["/new-order", "/checkout"]).optional(),
+  }),
   head: () => ({ meta: [{ title: "Customer Details — CHHOTA BAZAAR POS" }] }),
   component: CustomerDetailPage,
 });
 
-function CustomerDetailPage() {
+export function CustomerDetailPage() {
   const { customerId } = Route.useParams();
   const { setCustomer } = useCart();
+  const navigate = useNavigate();
+  const { returnTo } = Route.useSearch();
 
   const customerQuery = useQuery({
     queryKey: ["pos-customer-detail", customerId],
@@ -55,7 +61,9 @@ function CustomerDetailPage() {
       area: customer.area,
     };
     setCustomer(cartCustomer);
-    window.history.back();
+    if (returnTo) {
+      navigate({ to: returnTo });
+    }
   };
 
   if (isLoading) {
@@ -76,6 +84,7 @@ function CustomerDetailPage() {
           </p>
           <Link
             to="/customers"
+            search={returnTo ? { returnTo } : {}}
             className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[var(--brand-blue)] px-5 py-3 text-sm font-extrabold text-white"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -94,6 +103,7 @@ function CustomerDetailPage() {
             <div>
               <Link
                 to="/customers"
+                search={returnTo ? { returnTo } : {}}
                 className="inline-flex items-center gap-2 text-sm font-bold text-[var(--brand-blue)]"
               >
                 <ArrowLeft className="h-4 w-4" />

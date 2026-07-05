@@ -204,6 +204,7 @@ function CheckoutPage() {
               </div>
               <Link
                 to="/customers"
+                search={{ returnTo: "/checkout" }}
                 className="tap-target rounded-xl bg-[var(--secondary)] px-4 font-bold active:scale-95"
               >
                 {customer ? "Change" : "Add"}

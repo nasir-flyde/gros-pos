@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import type { OrderItem, PosOrder } from "./order-api";
 
 export interface CartProduct {
@@ -55,32 +55,113 @@ type CartCtx = {
 
 const Ctx = createContext<CartCtx | null>(null);
 
+const CART_STORAGE_KEY = "pos_active_cart";
+
+type PersistedCartState = {
+  items: CartItem[];
+  customer: PosCartCustomer | null;
+  activeOrderId: string | null;
+};
+
+const defaultCartState: PersistedCartState = {
+  items: [],
+  customer: null,
+  activeOrderId: null,
+};
+
+function readPersistedCartState(): PersistedCartState {
+  if (typeof window === "undefined") return defaultCartState;
+
+  try {
+    const raw = window.sessionStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return defaultCartState;
+
+    const parsed = JSON.parse(raw) as Partial<PersistedCartState> | null;
+    return {
+      items: Array.isArray(parsed?.items) ? parsed.items : [],
+      customer: parsed?.customer ?? null,
+      activeOrderId: typeof parsed?.activeOrderId === "string" ? parsed.activeOrderId : null,
+    };
+  } catch {
+    return defaultCartState;
+  }
+}
+
+function persistCartState(state: PersistedCartState) {
+  if (typeof window === "undefined") return;
+
+  if (state.items.length === 0 && !state.customer && !state.activeOrderId) {
+    window.sessionStorage.removeItem(CART_STORAGE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state));
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [customer, setCustomer] = useState<PosCartCustomer | null>(null);
-  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [initialState] = useState<PersistedCartState>(readPersistedCartState);
+  const [items, setItems] = useState<CartItem[]>(initialState.items);
+  const [customer, setCustomerState] = useState<PosCartCustomer | null>(initialState.customer);
+  const [activeOrderId, setActiveOrderIdState] = useState<string | null>(initialState.activeOrderId);
   const [lastCheckout, setLastCheckout] = useState<CheckoutInfo | null>(null);
+  const itemsRef = useRef(items);
+  const customerRef = useRef(customer);
+  const activeOrderIdRef = useRef(activeOrderId);
+
+  const commitCartState = ({
+    nextItems = itemsRef.current,
+    nextCustomer = customerRef.current,
+    nextActiveOrderId = activeOrderIdRef.current,
+  }: {
+    nextItems?: CartItem[];
+    nextCustomer?: PosCartCustomer | null;
+    nextActiveOrderId?: string | null;
+  }) => {
+    itemsRef.current = nextItems;
+    customerRef.current = nextCustomer;
+    activeOrderIdRef.current = nextActiveOrderId;
+
+    setItems(nextItems);
+    setCustomerState(nextCustomer);
+    setActiveOrderIdState(nextActiveOrderId);
+    persistCartState({
+      items: nextItems,
+      customer: nextCustomer,
+      activeOrderId: nextActiveOrderId,
+    });
+  };
 
   const add = (p: CartProduct) =>
-    setItems((prev) => {
-      const ex = prev.find((i) => i.product._id === p._id);
-      if (ex) return prev.map((i) => (i.product._id === p._id ? { ...i, qty: i.qty + 1 } : i));
-      return [...prev, { product: p, qty: 1 }];
+    commitCartState({
+      nextItems: (() => {
+        const ex = itemsRef.current.find((i) => i.product._id === p._id);
+        if (ex) {
+          return itemsRef.current.map((i) =>
+            i.product._id === p._id ? { ...i, qty: i.qty + 1 } : i,
+          );
+        }
+        return [...itemsRef.current, { product: p, qty: 1 }];
+      })(),
     });
   const inc = (id: string) =>
-    setItems((prev) => prev.map((i) => (i.product._id === id ? { ...i, qty: i.qty + 1 } : i)));
+    commitCartState({
+      nextItems: itemsRef.current.map((i) => (i.product._id === id ? { ...i, qty: i.qty + 1 } : i)),
+    });
   const dec = (id: string) =>
-    setItems((prev) =>
-      prev
+    commitCartState({
+      nextItems: itemsRef.current
         .map((i) => (i.product._id === id ? { ...i, qty: i.qty - 1 } : i))
         .filter((i) => i.qty > 0),
-    );
-  const remove = (id: string) => setItems((prev) => prev.filter((i) => i.product._id !== id));
-  const clear = () => {
-    setItems([]);
-    setCustomer(null);
-    setActiveOrderId(null);
-  };
+    });
+  const remove = (id: string) =>
+    commitCartState({
+      nextItems: itemsRef.current.filter((i) => i.product._id !== id),
+    });
+  const clear = () => commitCartState({ nextItems: [], nextCustomer: null, nextActiveOrderId: null });
+  const setCustomer = (nextCustomer: PosCartCustomer | null) =>
+    commitCartState({ nextCustomer });
+  const setActiveOrderId = (nextActiveOrderId: string | null) =>
+    commitCartState({ nextActiveOrderId });
 
   const loadHeldOrder = (order: PosOrder) => {
     const nextItems = (order.items ?? []).map((item: OrderItem) => ({
@@ -101,17 +182,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
       qty: item.quantity,
     }));
 
-    setItems(nextItems);
-    setActiveOrderId(order._id);
-    setCustomer(
-      order.customerId
+    commitCartState({
+      nextItems,
+      nextActiveOrderId: order._id,
+      nextCustomer: order.customerId
         ? {
             _id: order.customerId._id,
             name: order.customerId.name,
             mobile: order.customerId.mobile,
           }
         : null,
-    );
+    });
   };
 
   const { subtotal, discount, afterDisc, tax, count } = useMemo(() => {
