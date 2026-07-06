@@ -17,6 +17,9 @@ export interface PosVariant {
   unitValue: string;
   mrp: number;
   pricePerUnit: number;
+  sellingPrice?: number;
+  finalPrice?: number;
+  discountPercent?: number;
   barcodes: Array<{ code: string; type: string; isPrimary: boolean }>;
   images: Array<{ url: string }>;
   active: boolean;
@@ -49,6 +52,9 @@ export interface PosJoinedVariant {
   unitType: string;
   mrp: number;
   price: number;
+  sellingPrice?: number;
+  finalPrice?: number;
+  discountPercent?: number;
   barcode: string;
   barcodes: string[];
   imageUrl?: string;
@@ -70,7 +76,13 @@ interface ApiResponse<T> {
   meta?: PaginationMeta;
 }
 
-function buildJoinedMap(products: PosProduct[], variants: PosVariant[]): PosJoinedVariant[] {
+export function getEffectiveVariantPrice(
+  variant: Pick<PosVariant, "finalPrice" | "sellingPrice" | "pricePerUnit" | "mrp">,
+): number {
+  return variant.finalPrice ?? variant.sellingPrice ?? variant.pricePerUnit ?? variant.mrp ?? 0;
+}
+
+export function buildJoinedMap(products: PosProduct[], variants: PosVariant[]): PosJoinedVariant[] {
   const productMap = new Map(products.map((p) => [p._id, p]));
   return variants
     .filter((v) => v.active)
@@ -88,7 +100,10 @@ function buildJoinedMap(products: PosProduct[], variants: PosVariant[]): PosJoin
         unitValue: v.unitValue,
         unitType: v.unitType,
         mrp: v.mrp ?? 0,
-        price: v.pricePerUnit ?? v.mrp ?? 0,
+        price: getEffectiveVariantPrice(v),
+        sellingPrice: v.sellingPrice,
+        finalPrice: v.finalPrice,
+        discountPercent: v.discountPercent,
         barcode: v.barcodes.find((b) => b.isPrimary)?.code ?? v.barcodes[0]?.code ?? "",
         barcodes: v.barcodes.map((b) => b.code),
         imageUrl: v.images[0]?.url ?? product?.defaultImageUrl,

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { productApi, type PosVariant } from "@/lib/product-api";
+import { getEffectiveVariantPrice, productApi } from "@/lib/product-api";
 import { formatINR } from "@/lib/utils";
 import { useCart, type CartProduct } from "@/lib/cart-context";
 import { useAuthStore } from "@/lib/auth-store";
@@ -74,6 +74,7 @@ function ScannerPage() {
   const cartLine = scannedVariant ? items.find((i) => i.product._id === scannedVariant._id) : null;
 
   const cartTotal = items.reduce((s, i) => s + i.product.price * i.qty, 0);
+  const scannedSellPrice = scannedVariant ? getEffectiveVariantPrice(scannedVariant) : 0;
 
   // ── Detection loop (exact same as barcode-scanner) ─────────────────
   const stopDetectionLoop = useCallback(() => {
@@ -209,13 +210,13 @@ function ScannerPage() {
       name: scannedVariant.variantName,
       weight: `${scannedVariant.unitValue} ${scannedVariant.unitType}`,
       mrp: scannedVariant.mrp ?? 0,
-      price: scannedVariant.pricePerUnit ?? scannedVariant.mrp ?? 0,
+      price: scannedSellPrice,
       imageUrl: scannedVariant.images?.[0]?.url,
       taxRate: scannedVariant.taxRate ?? 0,
     };
     add(p);
     setBarcodeInput("");
-  }, [scannedVariant, scannedOutOfStock, add]);
+  }, [scannedSellPrice, scannedVariant, scannedOutOfStock, add]);
 
   // ── Auto-add to cart on successful scan ──────────────────────────────
   useEffect(() => {
@@ -355,10 +356,9 @@ function ScannerPage() {
                   </div>
                   <div className="mt-2 flex items-center gap-3">
                     <span className="text-2xl font-extrabold tabular-nums">
-                      {formatINR(scannedVariant.pricePerUnit ?? scannedVariant.mrp)}
+                      {formatINR(scannedSellPrice)}
                     </span>
-                    {!!scannedVariant.mrp &&
-                      scannedVariant.mrp > (scannedVariant.pricePerUnit ?? scannedVariant.mrp) && (
+                    {!!scannedVariant.mrp && scannedVariant.mrp > scannedSellPrice && (
                         <span className="text-sm font-semibold text-muted-foreground line-through tabular-nums">
                           {formatINR(scannedVariant.mrp)}
                         </span>
