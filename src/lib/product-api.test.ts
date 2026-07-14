@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildJoinedMap, getEffectiveVariantPrice } from "./product-api";
+import { buildJoinedMap, getEffectiveVariantPrice, getPosImageUrl } from "./product-api";
 
 describe("getEffectiveVariantPrice", () => {
   it("prefers finalPrice over sellingPrice and base variant fields", () => {
@@ -79,5 +79,41 @@ describe("buildJoinedMap", () => {
     expect(joined.finalPrice).toBe(49.5);
     expect(joined.discountPercent).toBe(10);
     expect(joined.imageUrl).toBe("https://example.com/product.png");
+  });
+});
+
+describe("getPosImageUrl", () => {
+  const baseVariant = {
+    images: [{ url: "https://example.com/legacy.png" }],
+  };
+
+  it("prefers the POS primary image", () => {
+    expect(
+      getPosImageUrl({
+        ...baseVariant,
+        posPrimaryImage: "https://example.com/pos-primary.png",
+        posImages: [{ url: "https://example.com/pos.png" }],
+      }),
+    ).toBe("https://example.com/pos-primary.png");
+  });
+
+  it("falls back through Frontsite and legacy images", () => {
+    expect(
+      getPosImageUrl({
+        ...baseVariant,
+        frontsiteImages: [{ url: "https://example.com/frontsite.png" }],
+      }),
+    ).toBe("https://example.com/frontsite.png");
+
+    expect(getPosImageUrl(baseVariant)).toBe("https://example.com/legacy.png");
+  });
+
+  it("uses the first product default image when the variant has no media", () => {
+    expect(
+      getPosImageUrl(
+        { images: [] },
+        { defaultImageUrl: "https://example.com/product.png,https://example.com/second.png" },
+      ),
+    ).toBe("https://example.com/product.png");
   });
 });

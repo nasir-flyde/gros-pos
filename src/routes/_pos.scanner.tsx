@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getEffectiveVariantPrice, productApi } from "@/lib/product-api";
+import { getEffectiveVariantPrice, getPosImageUrl, productApi } from "@/lib/product-api";
 import { formatINR } from "@/lib/utils";
 import { useCart, type CartProduct } from "@/lib/cart-context";
 import { useAuthStore } from "@/lib/auth-store";
@@ -211,7 +211,7 @@ function ScannerPage() {
       weight: `${scannedVariant.unitValue} ${scannedVariant.unitType}`,
       mrp: scannedVariant.mrp ?? 0,
       price: scannedSellPrice,
-      imageUrl: scannedVariant.images?.[0]?.url,
+      imageUrl: getPosImageUrl(scannedVariant),
       taxRate: scannedVariant.taxRate ?? 0,
     };
     add(p);
@@ -331,9 +331,9 @@ function ScannerPage() {
               <div className="w-full max-w-sm rounded-2xl border-2 bg-card p-4 shadow-sm">
                 {/* Image */}
                 <div className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-xl bg-[var(--secondary)]">
-                  {scannedVariant.images?.[0]?.url ? (
+                  {getPosImageUrl(scannedVariant) ? (
                     <img
-                      src={scannedVariant.images[0].url}
+                      src={getPosImageUrl(scannedVariant)}
                       alt={scannedVariant.variantName}
                       className="max-h-full max-w-full object-contain"
                     />
@@ -359,10 +359,10 @@ function ScannerPage() {
                       {formatINR(scannedSellPrice)}
                     </span>
                     {!!scannedVariant.mrp && scannedVariant.mrp > scannedSellPrice && (
-                        <span className="text-sm font-semibold text-muted-foreground line-through tabular-nums">
-                          {formatINR(scannedVariant.mrp)}
-                        </span>
-                      )}
+                      <span className="text-sm font-semibold text-muted-foreground line-through tabular-nums">
+                        {formatINR(scannedVariant.mrp)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 {/* Actions */}

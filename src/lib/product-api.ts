@@ -21,10 +21,19 @@ export interface PosVariant {
   finalPrice?: number;
   discountPercent?: number;
   barcodes: Array<{ code: string; type: string; isPrimary: boolean }>;
-  images: Array<{ url: string }>;
+  images: PosImage[];
+  frontsiteImages?: PosImage[];
+  frontsitePrimaryImage?: string;
+  posImages?: PosImage[];
+  posPrimaryImage?: string;
   active: boolean;
   taxRate: number;
   quantityAvailable?: number;
+}
+
+export interface PosImage {
+  url: string;
+  source?: "product" | string;
 }
 
 export interface PosProduct {
@@ -82,6 +91,24 @@ export function getEffectiveVariantPrice(
   return variant.finalPrice ?? variant.sellingPrice ?? variant.pricePerUnit ?? variant.mrp ?? 0;
 }
 
+export function getPosImageUrl(
+  variant: Pick<
+    PosVariant,
+    "posPrimaryImage" | "posImages" | "frontsitePrimaryImage" | "frontsiteImages" | "images"
+  >,
+  product?: Pick<PosProduct, "defaultImageUrl">,
+) {
+  return (
+    variant.posPrimaryImage ||
+    variant.posImages?.[0]?.url ||
+    variant.frontsitePrimaryImage ||
+    variant.frontsiteImages?.[0]?.url ||
+    variant.images?.[0]?.url ||
+    product?.defaultImageUrl?.split(",")[0]?.trim() ||
+    undefined
+  );
+}
+
 export function buildJoinedMap(products: PosProduct[], variants: PosVariant[]): PosJoinedVariant[] {
   const productMap = new Map(products.map((p) => [p._id, p]));
   return variants
@@ -106,7 +133,7 @@ export function buildJoinedMap(products: PosProduct[], variants: PosVariant[]): 
         discountPercent: v.discountPercent,
         barcode: v.barcodes.find((b) => b.isPrimary)?.code ?? v.barcodes[0]?.code ?? "",
         barcodes: v.barcodes.map((b) => b.code),
-        imageUrl: v.images[0]?.url ?? product?.defaultImageUrl,
+        imageUrl: getPosImageUrl(v, product),
         taxRate: v.taxRate ?? 0,
         quantityAvailable: v.quantityAvailable,
       };
