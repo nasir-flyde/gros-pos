@@ -9,7 +9,7 @@ import { storeOpsApi, type ReplenishmentSuggestion } from "@/lib/store-ops-api";
 import { warehouseApi, type PosWarehouse } from "@/lib/warehouse-api";
 
 export const Route = createFileRoute("/_pos/request-stock")({
-  head: () => ({ meta: [{ title: "Request Stock — CHHOTA BAZAAR" }] }),
+  head: () => ({ meta: [{ title: "Request Stock" }] }),
   component: RequestStockPage,
 });
 

@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_pos/hold")({
-  head: () => ({ meta: [{ title: "Held Orders — CHHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Held Orders" }] }),
   component: HoldPage,
 });
 

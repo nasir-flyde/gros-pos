@@ -33,7 +33,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_pos/")({
   head: () => ({
     meta: [
-      { title: "POS Home — CHHOTA BAZAAR" },
+      { title: "POS Home" },
       {
         name: "description",
         content: "Live store operations dashboard for cashiers and store managers.",

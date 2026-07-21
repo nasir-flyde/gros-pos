@@ -6,7 +6,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { productApi, type PosJoinedVariant } from "@/lib/product-api";
 
 export const Route = createFileRoute("/_pos/purchase-request")({
-  head: () => ({ meta: [{ title: "Purchase Request — CHHOTA BAZAAR" }] }),
+  head: () => ({ meta: [{ title: "Purchase Request" }] }),
   component: PurchaseRequestPage,
 });
 

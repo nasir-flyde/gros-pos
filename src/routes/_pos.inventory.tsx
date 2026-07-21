@@ -7,7 +7,7 @@ import { formatINR } from "@/lib/utils";
 import { TrendingUp, AlertTriangle, XCircle, Truck, ArrowLeftRight, FileText, Package, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_pos/inventory")({
-  head: () => ({ meta: [{ title: "Stock — CHHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Stock" }] }),
   component: InventoryPage,
 });
 

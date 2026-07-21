@@ -5,6 +5,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -12,6 +13,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { applyPosConfig, loadPublicPosConfig, usePosConfig } from "../lib/pos-config";
 
 function NotFoundComponent() {
   return (
@@ -78,15 +80,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "CHHOTA BAZAAR POS — Sab Kuch. Kareeb Se." },
+      { title: "GROW GRO POS" },
       {
         name: "description",
         content:
-          "Touch-first grocery POS for CHHOTA BAZAAR stores. Fast billing, deliveries, returns, and store operations.",
+          "Touch-first retail POS for fast billing, deliveries, returns, and store operations.",
       },
-      { name: "author", content: "CHHOTA BAZAAR" },
-      { property: "og:title", content: "CHHOTA BAZAAR POS" },
-      { property: "og:description", content: "Touch-first grocery POS for CHHOTA BAZAAR stores." },
+      { name: "author", content: "GROW GRO" },
+      { property: "og:title", content: "GROW GRO POS" },
+      { property: "og:description", content: "Touch-first retail point of sale." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -124,11 +126,28 @@ import { AuthProvider } from "../components/auth-provider";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const config = usePosConfig((state) => state.config);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  useEffect(() => {
+    loadPublicPosConfig();
+  }, []);
+
+  useEffect(() => {
+    applyPosConfig(config, pathname);
+  }, [config, pathname]);
 
   return (
     <ClerkProvider
       publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ""}
       afterSignOutUrl="/login"
+      appearance={{
+        variables: {
+          colorPrimary: config.primaryColor,
+          borderRadius: "0.75rem",
+          fontFamily: "Poppins, sans-serif",
+        },
+      }}
     >
       <QueryClientProvider client={queryClient}>
         <AuthProvider>

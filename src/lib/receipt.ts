@@ -132,7 +132,7 @@ export function normalizeReceiptData(
   const customerName =
     asString(nested.customerName, asString(root.customerName, fallback.customer?.name ?? ""));
   const paymentMode = asString(nested.paymentMode, asString(root.paymentMode, fallback.payment));
-  const storeName = asString(storeInfo.storeName, "CHHOTA BAZAAR");
+  const storeName = asString(storeInfo.storeName, "Store");
   const storePhone = asString(storeInfo.phone, "");
   const storeCode = asString(storeInfo.storeCode, "");
   const orgLegalName = asString(orgInfo.legalName, "");

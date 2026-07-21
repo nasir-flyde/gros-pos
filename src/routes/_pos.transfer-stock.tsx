@@ -10,7 +10,7 @@ import { storesApi, type PosStore } from "@/lib/store-api";
 import { storeOpsApi } from "@/lib/store-ops-api";
 
 export const Route = createFileRoute("/_pos/transfer-stock")({
-  head: () => ({ meta: [{ title: "Transfer Stock — CHHOTA BAZAAR" }] }),
+  head: () => ({ meta: [{ title: "Transfer Stock" }] }),
   component: TransferStockPage,
 });
 

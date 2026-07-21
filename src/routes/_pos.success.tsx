@@ -7,7 +7,7 @@ import { CheckCircle2, Printer, Bike, Plus, Download } from "lucide-react";
 import { ReceiptPrintContent } from "@/components/receipt/receipt-print-content";
 
 export const Route = createFileRoute("/_pos/success")({
-  head: () => ({ meta: [{ title: "Order Placed — CHHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Order Placed" }] }),
   component: SuccessPage,
 });
 

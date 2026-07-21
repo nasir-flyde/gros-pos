@@ -1,11 +1,12 @@
 import { SignIn } from "@clerk/react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Store } from "lucide-react";
+import { usePosConfig } from "@/lib/pos-config";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "POS Login — Chota Bazaar" },
+      { title: "POS Login" },
       { name: "description", content: "Sign in to access the store POS terminal." },
     ],
   }),
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function PosLoginPage() {
+  const config = usePosConfig((state) => state.config);
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900 px-4 py-12 sm:px-6 lg:px-8">
       <div className="absolute top-1/3 left-1/3 -z-10 size-[320px] rounded-full bg-orange-600/10 blur-[90px]" />
@@ -20,13 +22,24 @@ function PosLoginPage() {
 
       <div className="w-full max-w-md space-y-8">
         <div className="flex flex-col items-center text-center">
-          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/30">
-            <Store className="h-9 w-9" />
-          </div>
+          {config.logoUrl ? (
+            <img
+              src={config.logoUrl}
+              alt=""
+              className="h-16 w-16 rounded-2xl object-contain shadow-lg"
+            />
+          ) : (
+            <div
+              style={{ backgroundColor: config.primaryColor }}
+              className="grid h-16 w-16 place-items-center rounded-2xl text-white shadow-lg"
+            >
+              <Store className="h-9 w-9" />
+            </div>
+          )}
           <h2 className="mt-6 text-3xl font-black tracking-tight text-white uppercase">
-            Store Terminal
+            {config.loginHeading}
           </h2>
-          <p className="mt-2 text-sm text-slate-400">Sign in to start your checkout shift</p>
+          <p className="mt-2 text-sm text-slate-400">{config.loginSubtitle}</p>
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-8 shadow-2xl backdrop-blur-md">
@@ -58,7 +71,7 @@ function PosLoginPage() {
         </div>
 
         <p className="text-center text-[10.5px] uppercase tracking-wider text-slate-600">
-          Secure POS Gate &mdash; Powered by Clerk
+          {config.supportText || `${config.consoleName} Secure Sign-In`}
         </p>
       </div>
     </div>

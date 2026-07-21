@@ -18,7 +18,7 @@ const BcDetector =
     : undefined;
 
 export const Route = createFileRoute("/_pos/scanner")({
-  head: () => ({ meta: [{ title: "Scanner — CHHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Scanner" }] }),
   component: ScannerPage,
 });
 

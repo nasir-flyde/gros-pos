@@ -8,7 +8,7 @@ import { orderApi, type OrderItem, type PosOrder } from "@/lib/order-api";
 import { refundApi, type RefundRecord } from "@/lib/refund-api";
 
 export const Route = createFileRoute("/_pos/returns")({
-  head: () => ({ meta: [{ title: "Returns & Refunds — CHHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Returns & Refunds" }] }),
   component: ReturnsPage,
 });
 

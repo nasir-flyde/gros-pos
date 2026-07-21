@@ -32,11 +32,13 @@ function PosLayout() {
 
 import { useAuth } from "@clerk/react";
 import { useAuthStore } from "../lib/auth-store";
+import { usePosConfig } from "../lib/pos-config";
 import { LogOut } from "lucide-react";
 
 function TopHeader() {
   const [now, setNow] = useState(() => new Date());
   const user = useAuthStore((state) => state.user);
+  const config = usePosConfig((state) => state.config);
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -62,7 +64,14 @@ function TopHeader() {
   };
 
   const cashierName = user ? `${user.firstName} ${user.lastName}` : "Cashier Mode";
-  const initials = user ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase() : "CB";
+  const initials = user
+    ? `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "POS"
+    : config.organizationName
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part[0] || "")
+        .join("")
+        .toUpperCase() || "POS";
   const isSuperAdmin = user?.isSuperAdmin || false;
   const storeScope = isSuperAdmin ? "Super Admin Access" : "Store Terminal Scope";
 
@@ -70,13 +79,23 @@ function TopHeader() {
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 bg-[var(--brand-blue)] px-4 py-3 text-white sm:px-6">
       <div className="flex min-w-0 items-center gap-4">
         <div className="flex shrink-0 items-center gap-2.5">
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[var(--brand-yellow)] text-[var(--brand-blue)]">
-            <Store className="h-6 w-6" strokeWidth={2.5} />
-          </div>
+          {config.logoUrl ? (
+            <img
+              src={config.logoUrl}
+              alt=""
+              className="h-12 w-12 shrink-0 rounded-xl bg-white/10 object-contain p-1.5"
+            />
+          ) : (
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/15 text-white">
+              <Store className="h-6 w-6" strokeWidth={2.5} />
+            </div>
+          )}
           <div className="min-w-0">
-            <div className="text-lg font-extrabold leading-tight tracking-tight">CHHOTA BAZAAR</div>
+            <div className="truncate text-lg font-extrabold leading-tight tracking-tight">
+              {config.organizationName}
+            </div>
             <div className="text-[11px] font-medium leading-tight text-white/75">
-              Sab Kuch. Kareeb Se.
+              {config.tagline}
             </div>
           </div>
         </div>

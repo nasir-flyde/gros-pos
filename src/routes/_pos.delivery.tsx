@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_pos/delivery")({
-  head: () => ({ meta: [{ title: "Delivery Queue — CHHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Delivery Queue" }] }),
   component: DeliveryPage,
 });
 

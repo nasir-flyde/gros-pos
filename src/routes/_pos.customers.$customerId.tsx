@@ -11,7 +11,7 @@ export const Route = createFileRoute("/_pos/customers/$customerId")({
   validateSearch: z.object({
     returnTo: z.enum(["/new-order", "/checkout"]).optional(),
   }),
-  head: () => ({ meta: [{ title: "Customer Details — CHHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Customer Details" }] }),
   component: CustomerDetailPage,
 });
 

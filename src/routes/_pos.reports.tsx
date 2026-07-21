@@ -13,7 +13,7 @@ import {
 } from "@/lib/report-metrics";
 
 export const Route = createFileRoute("/_pos/reports")({
-  head: () => ({ meta: [{ title: "Daily Sales Report — CHHOTA BAZAAR POS" }] }),
+  head: () => ({ meta: [{ title: "Daily Sales Report" }] }),
   component: ReportsPage,
 });
 
