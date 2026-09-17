@@ -40,6 +40,13 @@ const PRINT_STYLES = `
       background: #fff !important;
     }
 
+    #${PRINT_ROOT_ID} [data-backend-receipt-html] {
+      width: 80mm !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      background: #fff !important;
+    }
+
     #${PRINT_ROOT_ID} [data-receipt-print-content] {
       width: 72mm !important;
       max-width: 72mm !important;
@@ -48,11 +55,41 @@ const PRINT_STYLES = `
       border: none !important;
       border-radius: 0 !important;
       box-shadow: none !important;
-      font-family: "Courier New", "Consolas", monospace !important;
-      font-size: 10px !important;
-      line-height: 1.3 !important;
+      font-family: Arial, Helvetica, sans-serif !important;
+      font-size: 11px !important;
+      font-weight: 600 !important;
+      line-height: 1.35 !important;
       color: #000 !important;
       background: #fff !important;
+      opacity: 1 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /*
+     * Backend receipts and the React fallback both contain muted gray utility
+     * classes. Thermal printers reproduce those grays as faint dot patterns,
+     * so print every receipt child as full black at a reliable minimum weight.
+     */
+    #${PRINT_ROOT_ID} [data-receipt-print-content] * {
+      color: #000 !important;
+      border-color: #000 !important;
+      opacity: 1 !important;
+      font-weight: 600 !important;
+      text-shadow: none !important;
+    }
+
+    #${PRINT_ROOT_ID} [data-receipt-print-content] :is(
+      strong,
+      b,
+      th,
+      h1,
+      h2,
+      h3,
+      .font-bold,
+      .font-extrabold
+    ) {
+      font-weight: 800 !important;
     }
 
     #${PRINT_ROOT_ID} .tabular-nums {
@@ -66,18 +103,9 @@ const nextFrame = () =>
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
   });
 
-export async function printNormalizedReceipt(receipt: NormalizedReceipt): Promise<boolean> {
-  if (typeof window === "undefined" || typeof document === "undefined") return false;
-
-  const existingRoot = document.getElementById(PRINT_ROOT_ID);
-  if (existingRoot) {
-    existingRoot.remove();
-  }
-
-  const existingStyle = document.getElementById(PRINT_STYLE_ID);
-  if (existingStyle) {
-    existingStyle.remove();
-  }
+function createPrintContainer() {
+  document.getElementById(PRINT_ROOT_ID)?.remove();
+  document.getElementById(PRINT_STYLE_ID)?.remove();
 
   const style = document.createElement("style");
   style.id = PRINT_STYLE_ID;
@@ -88,15 +116,14 @@ export async function printNormalizedReceipt(receipt: NormalizedReceipt): Promis
   container.id = PRINT_ROOT_ID;
   document.body.appendChild(container);
 
-  const root = createRoot(container);
-  flushSync(() => {
-    root.render(
-      <div className="bg-white p-6">
-        <ReceiptPrintContent receipt={receipt} />
-      </div>,
-    );
-  });
+  return { container, style };
+}
 
+async function printMountedReceipt(
+  container: HTMLElement,
+  style: HTMLStyleElement,
+  dispose?: () => void,
+): Promise<boolean> {
   await nextFrame();
 
   return new Promise<boolean>((resolve) => {
@@ -106,7 +133,7 @@ export async function printNormalizedReceipt(receipt: NormalizedReceipt): Promis
       if (finished) return;
       finished = true;
       window.removeEventListener("afterprint", handleAfterPrint);
-      root.unmount();
+      dispose?.();
       container.remove();
       style.remove();
       resolve(result);
@@ -125,4 +152,59 @@ export async function printNormalizedReceipt(receipt: NormalizedReceipt): Promis
       cleanup(false);
     }
   });
+}
+
+export async function printReceiptHtml(receiptHtml: string): Promise<boolean> {
+  if (typeof window === "undefined" || typeof document === "undefined" || !receiptHtml.trim()) {
+    return false;
+  }
+
+  const { container, style } = createPrintContainer();
+
+  try {
+    const parsed = new DOMParser().parseFromString(receiptHtml, "text/html");
+    const wrapper = document.createElement("div");
+
+    for (const attribute of parsed.body.attributes) {
+      wrapper.setAttribute(attribute.name, attribute.value);
+    }
+
+    wrapper.setAttribute("data-backend-receipt-html", "");
+
+    parsed.head.querySelectorAll("style, link[rel='stylesheet']").forEach((node) => {
+      wrapper.appendChild(node.cloneNode(true));
+    });
+
+    while (parsed.body.firstChild) {
+      wrapper.appendChild(parsed.body.firstChild);
+    }
+
+    if (!wrapper.querySelector("[data-receipt-print-content]")) {
+      wrapper.setAttribute("data-receipt-print-content", "");
+    }
+
+    container.appendChild(wrapper);
+    return await printMountedReceipt(container, style);
+  } catch {
+    container.remove();
+    style.remove();
+    return false;
+  }
+}
+
+export async function printNormalizedReceipt(receipt: NormalizedReceipt): Promise<boolean> {
+  if (typeof window === "undefined" || typeof document === "undefined") return false;
+
+  const { container, style } = createPrintContainer();
+
+  const root = createRoot(container);
+  flushSync(() => {
+    root.render(
+      <div className="bg-white p-6">
+        <ReceiptPrintContent receipt={receipt} />
+      </div>,
+    );
+  });
+
+  return printMountedReceipt(container, style, () => root.unmount());
 }

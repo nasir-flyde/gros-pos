@@ -44,9 +44,12 @@ export const usePosConfig = create<PosConfigState>((set) => ({
 }));
 
 let protectedConfigLoaded = false;
+let configGeneration = 0;
 
 export function clearProtectedPosConfig() {
+  configGeneration += 1;
   protectedConfigLoaded = false;
+  setAndApply(defaultPosConfig);
 }
 
 const pageLabels: Record<string, string> = {
@@ -58,6 +61,9 @@ const pageLabels: Record<string, string> = {
   "/customers": "Customers",
   "/inventory": "Stock",
   "/returns": "Returns",
+  "/orders": "Orders",
+  "/pack-breakdown": "Pack Breakdown",
+  "/shelf-labels": "SEL Printing",
   "/reports": "Reports",
   "/delivery": "Delivery",
 };
@@ -110,22 +116,26 @@ function setAndApply(config: Partial<PosConfig>) {
 }
 
 export async function loadPublicPosConfig() {
+  const generation = configGeneration;
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:5002/api/v1";
   try {
     const response = await fetch(`${apiUrl}/public/pos-config`, {
       headers: { "X-Tenant-Host": window.location.hostname },
     });
     const body = await response.json();
-    if (protectedConfigLoaded) return usePosConfig.getState().config;
+    if (generation !== configGeneration || protectedConfigLoaded)
+      return usePosConfig.getState().config;
     if (!response.ok || !body?.data) return setAndApply(defaultPosConfig);
     return setAndApply(body.data);
   } catch {
-    if (protectedConfigLoaded) return usePosConfig.getState().config;
+    if (generation !== configGeneration || protectedConfigLoaded)
+      return usePosConfig.getState().config;
     return setAndApply(defaultPosConfig);
   }
 }
 
 export async function loadProtectedPosConfig() {
+  const generation = configGeneration;
   const response = (await api.get("/site-config")) as {
     data?: {
       pos?: Partial<PosConfig>;
@@ -133,6 +143,7 @@ export async function loadProtectedPosConfig() {
       theme?: Record<string, string>;
     };
   };
+  if (generation !== configGeneration) return usePosConfig.getState().config;
   const siteConfig = response.data || {};
   const brand = siteConfig.brand || {};
   const storeName = brand.shortName || brand.name || defaultPosConfig.organizationName;

@@ -1,193 +1,187 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Download, Loader2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { useAuthStore } from "@/lib/auth-store";
-import { orderApi, type PosOrder } from "@/lib/order-api";
-import {
-  buildCashMetrics,
-  buildHourlySales,
-  buildPaymentBreakdown,
-  buildStatusBreakdown,
-} from "@/lib/report-metrics";
+import { getErrorMessage } from "@/lib/pos-page-state";
+import { reportApi } from "@/lib/report-api";
 
 export const Route = createFileRoute("/_pos/reports")({
   head: () => ({ meta: [{ title: "Daily Sales Report" }] }),
   component: ReportsPage,
 });
 
-const inr = (value: number) => `₹${value.toLocaleString("en-IN")}`;
+const inr = (value: number) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 function ReportsPage() {
   const { scopes } = useAuthStore();
   const storeId = scopes.find((scope) => scope.type === "store")?.id ?? "";
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const dateFrom = new Date(`${date}T00:00:00`).toISOString();
-  const dateTo = new Date(`${date}T23:59:59`).toISOString();
+  const params = useMemo(
+    () => ({
+      storeId,
+      dateFrom: new Date(`${date}T00:00:00`).toISOString(),
+      dateTo: new Date(`${date}T23:59:59`).toISOString(),
+    }),
+    [date, storeId],
+  );
 
   const reportsQuery = useQuery({
-    queryKey: ["pos-reports", storeId, dateFrom, dateTo],
-    queryFn: () => orderApi.list({ storeId, dateFrom, dateTo, limit: 500 }),
-    enabled: !!storeId,
+    queryKey: ["daily-sales-report", params],
+    queryFn: () => reportApi.dailySales(params),
+    enabled: Boolean(storeId),
+  });
+  const exportMutation = useMutation({
+    mutationFn: () => reportApi.downloadDailySales(params, `daily-sales-report-${date}.csv`),
+    onSuccess: () => toast.success("Daily sales report downloaded"),
+    onError: (error) => toast.error(getErrorMessage(error, "Report export failed")),
   });
 
-  const orders = useMemo(
-    () => ((reportsQuery.data?.data ?? []) as PosOrder[]).filter((order) => order.orderType === "POS"),
-    [reportsQuery.data?.data],
+  const rows = useMemo(() => reportsQuery.data?.data.rows ?? [], [reportsQuery.data]);
+  const metrics = useMemo(
+    () => ({
+      sales: rows.reduce((sum, row) => sum + Number(row.netAmount || 0), 0),
+      invoices: new Set(rows.map((row) => row.invoiceNo)).size,
+      units: rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+      gst: rows.reduce((sum, row) => sum + Number(row.gstCollected || 0), 0),
+    }),
+    [rows],
   );
-  const cashMetrics = useMemo(() => buildCashMetrics(orders), [orders]);
-  const hourly = useMemo(() => buildHourlySales(orders).filter((point) => point.sales > 0), [orders]);
-  const paymentBreakdown = useMemo(() => buildPaymentBreakdown(orders), [orders]);
-  const statusBreakdown = useMemo(() => buildStatusBreakdown(orders), [orders]);
-
-  const totalSales = orders.reduce((sum, order) => sum + order.grandTotal, 0);
-  const avgBasket = orders.length > 0 ? totalSales / orders.length : 0;
 
   return (
     <div className="h-full overflow-y-auto p-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold">Daily Sales Report</h1>
           <p className="text-sm font-semibold text-muted-foreground">
-            Live order analytics for the current store.
+            Invoice-line sales by article, SKU, and barcode.
           </p>
         </div>
-        <label className="rounded-xl border bg-card px-3 py-2">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-            Report Date
-          </div>
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="bg-transparent font-semibold focus:outline-none"
-          />
-        </label>
+        <div className="flex items-end gap-2">
+          <label className="rounded-lg border bg-card px-3 py-2">
+            <span className="block text-[11px] font-bold uppercase text-muted-foreground">
+              Date
+            </span>
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              className="bg-transparent font-semibold focus:outline-none"
+            />
+          </label>
+          <button
+            type="button"
+            title="Download CSV"
+            aria-label="Download CSV"
+            disabled={exportMutation.isPending || rows.length === 0}
+            onClick={() => exportMutation.mutate()}
+            className="flex h-12 w-12 items-center justify-center rounded-lg bg-[var(--brand-blue)] text-white disabled:opacity-50"
+          >
+            {exportMutation.isPending ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Download className="h-5 w-5" />
+            )}
+          </button>
+        </div>
       </div>
 
       {reportsQuery.isLoading ? (
         <div className="mt-10 text-center text-muted-foreground">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
         </div>
+      ) : reportsQuery.isError ? (
+        <div className="mt-10 border-2 border-[var(--brand-red)]/30 bg-card p-8 text-center">
+          <div className="font-extrabold">Report unavailable</div>
+          <p className="mt-1 text-sm font-semibold text-muted-foreground">
+            {getErrorMessage(reportsQuery.error, "Daily sales report could not be loaded.")}
+          </p>
+          <button
+            type="button"
+            onClick={() => void reportsQuery.refetch()}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[var(--brand-blue)] px-5 py-3 text-sm font-extrabold text-white"
+          >
+            <RefreshCw className="h-4 w-4" /> Retry
+          </button>
+        </div>
       ) : (
         <>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             {[
-              { label: "Total Sales", value: inr(totalSales), color: "var(--brand-green)" },
-              { label: "Orders", value: String(orders.length), color: "var(--brand-blue)" },
-              { label: "Avg Basket", value: inr(Math.round(avgBasket)), color: "var(--brand-orange)" },
-              { label: "Refunded", value: inr(cashMetrics.refunds), color: "var(--brand-red)" },
-            ].map((metric) => (
-              <div key={metric.label} className="rounded-2xl border-2 bg-card p-4">
-                <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                  {metric.label}
-                </div>
-                <div className="mt-1 text-2xl font-extrabold tabular-nums" style={{ color: metric.color }}>
-                  {metric.value}
-                </div>
+              ["Net Sales", inr(metrics.sales)],
+              ["Invoices", String(metrics.invoices)],
+              ["Units", String(metrics.units)],
+              ["GST", inr(metrics.gst)],
+            ].map(([label, value]) => (
+              <div key={label} className="border-2 bg-card p-4">
+                <div className="text-[11px] font-bold uppercase text-muted-foreground">{label}</div>
+                <div className="mt-1 text-2xl font-extrabold tabular-nums">{value}</div>
               </div>
             ))}
           </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border-2 bg-card p-4">
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                Hourly Sales
-              </h2>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={hourly}>
-                    <XAxis
-                      dataKey="hour"
-                      tick={{ fontSize: 12, fontWeight: 700 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis hide />
-                    <Tooltip
-                      cursor={{ fill: "var(--secondary)" }}
-                      contentStyle={{
-                        borderRadius: 12,
-                        border: "2px solid var(--border)",
-                        fontWeight: 700,
-                      }}
-                      formatter={(value: number) => inr(value)}
-                    />
-                    <Bar dataKey="sales" fill="var(--brand-blue)" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border-2 bg-card p-4">
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                Payment Mix
-              </h2>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={paymentBreakdown} layout="vertical" margin={{ left: 20 }}>
-                    <XAxis type="number" hide />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      tick={{ fontSize: 11, fontWeight: 700 }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={70}
-                    />
-                    <Tooltip
-                      cursor={{ fill: "var(--secondary)" }}
-                      contentStyle={{
-                        borderRadius: 12,
-                        border: "2px solid var(--border)",
-                        fontWeight: 700,
-                      }}
-                      formatter={(value: number) => inr(value)}
-                    />
-                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                      {paymentBreakdown.map((entry, index) => (
-                        <Cell
-                          key={entry.name}
-                          fill={[
-                            "#052B7B",
-                            "#5FAE3E",
-                            "#FF7A00",
-                            "#E1261C",
-                            "#FFC928",
-                          ][index % 5]}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl border-2 bg-card p-4">
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-              Order Status Breakdown
-            </h2>
-            <table className="w-full text-left">
-              <thead className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          <div className="mt-4 overflow-x-auto border-2 bg-card">
+            <table className="min-w-[1280px] w-full text-left text-sm">
+              <thead className="sticky top-0 bg-[var(--secondary)] text-xs font-bold uppercase text-muted-foreground">
                 <tr>
-                  <th className="py-2">Status</th>
-                  <th className="py-2 text-right">Orders</th>
+                  {[
+                    "Invoice",
+                    "Store",
+                    "Article ID",
+                    "SKU",
+                    "Barcode",
+                    "Variant",
+                    "Category",
+                    "Qty",
+                    "MRP",
+                    "Discount",
+                    "Net",
+                    "GST",
+                    "Receipt Mode",
+                  ].map((heading) => (
+                    <th key={heading} className="whitespace-nowrap px-3 py-3">
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="font-bold">
-                {statusBreakdown.length === 0 ? (
+              <tbody className="font-semibold">
+                {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={2} className="py-6 text-center text-sm text-muted-foreground">
-                      No orders available yet.
+                    <td colSpan={13} className="px-4 py-10 text-center text-muted-foreground">
+                      No sales found for this date.
                     </td>
                   </tr>
                 ) : (
-                  statusBreakdown.map((status) => (
-                    <tr key={status.name} className="border-t">
-                      <td className="py-3">{status.name}</td>
-                      <td className="py-3 text-right tabular-nums">{status.value}</td>
+                  rows.map((row, index) => (
+                    <tr key={`${row.invoiceNo}-${row.articleId}-${index}`} className="border-t">
+                      <td className="whitespace-nowrap px-3 py-3 font-extrabold">
+                        {row.invoiceNo}
+                      </td>
+                      <td className="px-3 py-3">{row.storeCode || "-"}</td>
+                      <td
+                        className="max-w-40 truncate px-3 py-3 font-mono text-xs"
+                        title={row.articleId}
+                      >
+                        {row.articleId}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3">{row.sku || "-"}</td>
+                      <td className="whitespace-nowrap px-3 py-3 font-mono">
+                        {row.primaryBarcode || "-"}
+                      </td>
+                      <td className="px-3 py-3">{row.variantName || row.itemDescription}</td>
+                      <td className="px-3 py-3">{row.itemCategoryCode}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{row.quantity}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{inr(row.mrp)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{inr(row.lineDiscount)}</td>
+                      <td className="px-3 py-3 text-right font-extrabold tabular-nums">
+                        {inr(row.netAmount)}
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums">
+                        {inr(row.gstCollected || 0)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3">{row.modeOfReceipt}</td>
                     </tr>
                   ))
                 )}

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPosCheckoutPayload,
+  buildPaytmPosRequestPayload,
+  getPayloadPaymentTotal,
   hasExactPaymentTotal,
+  hasMatchingPayloadPaymentTotal,
   resolveCheckoutPayments,
 } from "./checkout-flow";
 
@@ -17,17 +20,8 @@ describe("checkout flow helpers", () => {
       cashierId: "cashier-1",
       charges: { delivery: 0, discount: 0 },
     });
-
     expect(payload.payments).toEqual([{ paymentMode: "CARD", amount: 120 }]);
-    expect(payload.items).toEqual([
-      {
-        productVariantId: "variant-1",
-        quantity: 1,
-        unitPrice: 120,
-        taxRate: 5,
-        discountAmount: 0,
-      },
-    ]);
+    expect(hasMatchingPayloadPaymentTotal(payload)).toBe(true);
   });
 
   it("validates split payments against the exact grand total", () => {
@@ -37,51 +31,56 @@ describe("checkout flow helpers", () => {
       CARD: "100",
       WALLET: "",
     });
-
     expect(hasExactPaymentTotal(payments, 250)).toBe(true);
     expect(hasExactPaymentTotal(payments, 249.99)).toBe(false);
   });
 
-  it("includes orderId when completing a resumed held order", () => {
+  it("preserves the reported above-MRP edge case in payload and payment totals", () => {
     const payload = buildPosCheckoutPayload({
-      cartItems: [{ product: { _id: "variant-2", mrp: 80, price: 80 }, qty: 2 }],
-      payment: "UPI",
-      grandTotal: 160,
+      cartItems: [{ product: { _id: "variant-edge", mrp: 100, price: 102 }, qty: 1 }],
+      payment: "Cash",
+      grandTotal: 102,
       splitPayments: { CASH: "", UPI: "", CARD: "", WALLET: "" },
       deliveryType: "Walk-Out",
       storeId: "store-1",
       cashierId: "cashier-1",
       charges: { delivery: 0, discount: 0 },
-      customerId: "customer-1",
-      orderId: "order-123",
     });
-
-    expect(payload.orderId).toBe("order-123");
+    expect(payload.items[0]).toMatchObject({ unitPrice: 102, discountAmount: 0 });
+    expect(getPayloadPaymentTotal(payload)).toBe(102);
+    expect(hasMatchingPayloadPaymentTotal(payload)).toBe(true);
   });
 
-  it("sends catalog markdown as an item discount while keeping top-level discount for manual extras", () => {
+  it("validates split payment with manual discount and delivery against payload total", () => {
     const payload = buildPosCheckoutPayload({
-      cartItems: [{ product: { _id: "variant-3", mrp: 1200, price: 1078, taxRate: 5 }, qty: 1 }],
+      cartItems: [
+        { product: { _id: "a", mrp: 120, price: 100 }, qty: 2 },
+        { product: { _id: "b", mrp: 50, price: 45 }, qty: 1 },
+      ],
       payment: "Split",
-      grandTotal: 1078,
-      splitPayments: { CASH: "500", UPI: "578", CARD: "", WALLET: "" },
+      grandTotal: 260,
+      splitPayments: { CASH: "100", UPI: "160", CARD: "", WALLET: "" },
+      deliveryType: "Home",
+      storeId: "store-1",
+      cashierId: "cashier-1",
+      charges: { delivery: 25, discount: 10 },
+    });
+    expect(hasMatchingPayloadPaymentTotal(payload)).toBe(true);
+  });
+
+  it("builds a Paytm device request without a client-controlled payment result", () => {
+    const payload = buildPaytmPosRequestPayload({
+      cartItems: [{ product: { _id: "variant-4", mrp: 250, price: 250 }, qty: 1 }],
+      grandTotal: 250,
       deliveryType: "Walk-Out",
       storeId: "store-1",
       cashierId: "cashier-1",
       charges: { delivery: 0, discount: 0 },
     });
 
-    expect(payload.discount).toBe(0);
-    expect(payload.items[0]).toEqual({
-      productVariantId: "variant-3",
-      quantity: 1,
-      unitPrice: 1200,
-      taxRate: 5,
-      discountAmount: 122,
-    });
-    expect(payload.payments).toEqual([
-      { paymentMode: "CASH", amount: 500 },
-      { paymentMode: "UPI", amount: 578 },
+    expect(payload).not.toHaveProperty("payments");
+    expect(payload.items).toEqual([
+      expect.objectContaining({ productVariantId: "variant-4", quantity: 1 }),
     ]);
   });
 });

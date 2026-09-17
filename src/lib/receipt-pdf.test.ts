@@ -123,12 +123,14 @@ describe("generateReceiptPdf", () => {
 
     expect(wrappedNameLines.length).toBeGreaterThan(1);
     expect(wrappedNameLines.some((call) => call.text.includes("Pack 5kg"))).toBe(true);
+    expect(textCalls.some((call) => call.text.includes("HSN"))).toBe(false);
+    expect(textCalls.some((call) => call.text.trim() === "1001")).toBe(false);
 
     const nextItemCall = textCalls.find((call) => call.text === "Rock Salt");
     const lastWrappedLine = wrappedNameLines.at(-1);
 
     expect(nextItemCall).toBeDefined();
     expect(lastWrappedLine).toBeDefined();
-    expect((nextItemCall?.y ?? 0)).toBeGreaterThan(lastWrappedLine?.y ?? 0);
+    expect(nextItemCall?.y ?? 0).toBeGreaterThan(lastWrappedLine?.y ?? 0);
   });
 });

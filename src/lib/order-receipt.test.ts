@@ -1,16 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchAndPrintOrderReceipt, getNormalizedOrderReceipt } from "./order-receipt";
+import {
+  fetchAndPrintOrderReceipt,
+  fetchAndPrintOrderReceiptHtml,
+  getNormalizedOrderReceipt,
+} from "./order-receipt";
 import { orderApi, type PosOrder } from "./order-api";
-import { printNormalizedReceipt } from "./receipt-print";
+import { printNormalizedReceipt, printReceiptHtml } from "./receipt-print";
 
 vi.mock("./order-api", () => ({
   orderApi: {
     getReceipt: vi.fn(),
+    getReceiptHtml: vi.fn(),
   },
 }));
 
 vi.mock("./receipt-print", () => ({
   printNormalizedReceipt: vi.fn(),
+  printReceiptHtml: vi.fn(),
 }));
 
 const order: PosOrder = {
@@ -52,22 +58,41 @@ describe("order receipt helpers", () => {
     expect(receipt.orderId).toBe("ORD-3003");
   });
 
-  it("prints a fetched receipt", async () => {
-    vi.mocked(orderApi.getReceipt).mockResolvedValue({
-      success: true,
-      data: {
-        receiptNumber: "RCPT-3003",
-      },
-    } as never);
-    vi.mocked(printNormalizedReceipt).mockResolvedValue(true);
+  it("prints backend HTML without fetching JSON", async () => {
+    vi.mocked(orderApi.getReceiptHtml).mockResolvedValue("<main>Receipt</main>");
+    vi.mocked(printReceiptHtml).mockResolvedValue(true);
 
     const printed = await fetchAndPrintOrderReceipt(order);
 
-    expect(printNormalizedReceipt).toHaveBeenCalledTimes(1);
+    expect(orderApi.getReceiptHtml).toHaveBeenCalledWith("order-object-1");
+    expect(printReceiptHtml).toHaveBeenCalledWith("<main>Receipt</main>");
+    expect(orderApi.getReceipt).not.toHaveBeenCalled();
+    expect(printNormalizedReceipt).not.toHaveBeenCalled();
     expect(printed).toBe(true);
   });
 
+  it("prints HTML directly by order id", async () => {
+    vi.mocked(orderApi.getReceiptHtml).mockResolvedValue("<main>Receipt</main>");
+    vi.mocked(printReceiptHtml).mockResolvedValue(true);
+
+    await expect(fetchAndPrintOrderReceiptHtml("order-object-1")).resolves.toBe(true);
+    expect(printReceiptHtml).toHaveBeenCalledWith("<main>Receipt</main>");
+  });
+
+  it("falls back to normalized JSON when backend HTML is unavailable", async () => {
+    vi.mocked(orderApi.getReceiptHtml).mockRejectedValue(new Error("Not ready"));
+    vi.mocked(orderApi.getReceipt).mockResolvedValue({
+      success: true,
+      data: { receiptNumber: "RCPT-3003" },
+    } as never);
+    vi.mocked(printNormalizedReceipt).mockResolvedValue(true);
+
+    await expect(fetchAndPrintOrderReceipt(order)).resolves.toBe(true);
+    expect(printNormalizedReceipt).toHaveBeenCalledTimes(1);
+  });
+
   it("throws when the backend has no printable receipt", async () => {
+    vi.mocked(orderApi.getReceiptHtml).mockRejectedValue(new Error("Not ready"));
     vi.mocked(orderApi.getReceipt).mockResolvedValue({
       success: true,
       data: null,

@@ -1,4 +1,4 @@
-import type { PosJoinedVariant } from "./product-api";
+import { getVariantStockStatus, type PosJoinedVariant } from "./product-api";
 import type { FulfillmentStatus, OrderStatus, PosOrder } from "./order-api";
 
 export type HourlySalesPoint = {
@@ -34,7 +34,11 @@ export type PendingFulfillmentCounts = {
 
 const ONLINE_PAYMENT_MODES = new Set(["UPI", "CARD", "WALLET"]);
 const CLOSED_ORDER_STATUSES = new Set(["COMPLETED", "CANCELLED", "REFUNDED"]);
-const CLOSED_FULFILLMENT_STATUSES = new Set<FulfillmentStatus>(["DELIVERED", "CANCELLED", "FAILED"]);
+const CLOSED_FULFILLMENT_STATUSES = new Set<FulfillmentStatus>([
+  "DELIVERED",
+  "CANCELLED",
+  "FAILED",
+]);
 
 export function buildHourlySales(orders: PosOrder[]): HourlySalesPoint[] {
   const buckets = new Map<string, number>();
@@ -110,7 +114,11 @@ export function buildAverageBasket(
   revenue: number,
   completedOrders: number,
 ) {
-  if (typeof averageOrderValue === "number" && Number.isFinite(averageOrderValue) && averageOrderValue > 0) {
+  if (
+    typeof averageOrderValue === "number" &&
+    Number.isFinite(averageOrderValue) &&
+    averageOrderValue > 0
+  ) {
     return averageOrderValue;
   }
 
@@ -124,10 +132,10 @@ export function buildAverageBasket(
 export function buildInventoryAlertCounts(variants: PosJoinedVariant[]): InventoryAlertCounts {
   return variants.reduce(
     (counts, variant) => {
-      const quantity = variant.quantityAvailable ?? 0;
-      if (quantity < 10) {
+      const status = getVariantStockStatus(variant);
+      if (status === "OUT_OF_STOCK" || status === "CRITICAL") {
         counts.criticalCount += 1;
-      } else if (quantity < 20) {
+      } else if (status === "LOW") {
         counts.lowCount += 1;
       }
 

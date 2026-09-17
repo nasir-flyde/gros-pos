@@ -1,6 +1,6 @@
 import { SignIn } from "@clerk/react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Store } from "lucide-react";
+import { BrandIcon } from "@/components/brand-icon";
 import { usePosConfig } from "@/lib/pos-config";
 
 export const Route = createFileRoute("/login")({
@@ -17,7 +17,7 @@ function PosLoginPage() {
   const config = usePosConfig((state) => state.config);
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="absolute top-1/3 left-1/3 -z-10 size-[320px] rounded-full bg-orange-600/10 blur-[90px]" />
+      <div className="absolute left-1/3 top-1/3 -z-10 size-[320px] rounded-full bg-orange-600/10 blur-[90px]" />
       <div className="absolute bottom-1/3 right-1/3 -z-10 size-[320px] rounded-full bg-yellow-500/10 blur-[90px]" />
 
       <div className="w-full max-w-md space-y-8">
@@ -29,14 +29,9 @@ function PosLoginPage() {
               className="h-16 w-16 rounded-2xl object-contain shadow-lg"
             />
           ) : (
-            <div
-              style={{ backgroundColor: config.primaryColor }}
-              className="grid h-16 w-16 place-items-center rounded-2xl text-white shadow-lg"
-            >
-              <Store className="h-9 w-9" />
-            </div>
+            <BrandIcon className="h-16 w-16 rounded-2xl shadow-lg shadow-orange-500/30" />
           )}
-          <h2 className="mt-6 text-3xl font-black tracking-tight text-white uppercase">
+          <h2 className="mt-6 text-3xl font-black uppercase tracking-tight text-white">
             {config.loginHeading}
           </h2>
           <p className="mt-2 text-sm text-slate-400">{config.loginSubtitle}</p>

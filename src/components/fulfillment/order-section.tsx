@@ -1,5 +1,6 @@
-import { Loader2, Printer } from "lucide-react";
+import { Loader2, Printer, RefreshCw } from "lucide-react";
 import type { OrderTracking, PosOrder } from "@/lib/order-api";
+import { getErrorMessage } from "@/lib/pos-page-state";
 
 const inr = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 
@@ -7,6 +8,9 @@ export function FulfillmentOrderSection({
   title,
   orders,
   isLoading,
+  isError = false,
+  error,
+  onRetry,
   onSelect,
   onPickupConfirm,
   onPrintReceipt,
@@ -16,6 +20,9 @@ export function FulfillmentOrderSection({
   title: string;
   orders: PosOrder[];
   isLoading: boolean;
+  isError?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
   onSelect: (orderId: string) => void;
   onPickupConfirm?: (orderId: string) => void;
   onPrintReceipt?: (order: PosOrder) => void;
@@ -42,6 +49,25 @@ export function FulfillmentOrderSection({
             <tr>
               <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                 <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+              </td>
+            </tr>
+          ) : isError ? (
+            <tr>
+              <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                <div className="font-extrabold text-foreground">Orders unavailable</div>
+                <div className="mt-1 text-sm font-semibold">
+                  {getErrorMessage(error, "Fulfillment orders could not be loaded.")}
+                </div>
+                {onRetry ? (
+                  <button
+                    type="button"
+                    onClick={onRetry}
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[var(--brand-blue)] px-4 py-2 text-xs font-extrabold text-white"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Retry Orders
+                  </button>
+                ) : null}
               </td>
             </tr>
           ) : orders.length === 0 ? (
@@ -122,10 +148,16 @@ export function FulfillmentTrackingPanel({
   selectedOrderId,
   tracking,
   isLoading,
+  isError = false,
+  error,
+  onRetry,
 }: {
   selectedOrderId: string | null;
   tracking?: OrderTracking;
   isLoading: boolean;
+  isError?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
 }) {
   return (
     <aside className="rounded-2xl border-2 bg-[var(--secondary)] p-4">
@@ -139,6 +171,21 @@ export function FulfillmentTrackingPanel({
       ) : isLoading ? (
         <div className="mt-3 text-center text-muted-foreground">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+        </div>
+      ) : isError ? (
+        <div className="mt-3 rounded-xl bg-white p-4 text-sm font-semibold text-muted-foreground">
+          <div className="font-extrabold text-foreground">Tracking unavailable</div>
+          <div className="mt-1">{getErrorMessage(error, "Tracking could not be loaded.")}</div>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[var(--brand-blue)] px-4 py-2 text-xs font-extrabold text-white"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry Tracking
+            </button>
+          ) : null}
         </div>
       ) : tracking ? (
         <div className="mt-3 space-y-3">

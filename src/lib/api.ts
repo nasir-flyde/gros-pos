@@ -1,9 +1,8 @@
 import axios from "axios";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5002/api/v1";
+import { runtimeConfig } from "./runtime-config";
 
 export const api = axios.create({
-  baseURL: API_URL,
+  baseURL: runtimeConfig.apiUrl,
   headers: {
     "Content-Type": "application/json",
   },
@@ -11,7 +10,9 @@ export const api = axios.create({
 
 let _getClerkToken: (() => Promise<string | null>) | null = null;
 
-export const setClerkTokenGetter = (fn: () => Promise<string | null>) => {
+export const getApiAuthToken = () => (_getClerkToken ? _getClerkToken() : Promise.resolve(null));
+
+export const setClerkTokenGetter = (fn: (() => Promise<string | null>) | null) => {
   _getClerkToken = fn;
 };
 
@@ -37,12 +38,13 @@ api.interceptors.response.use(
   (error) => {
     const serverError = error.response?.data;
     if (serverError && typeof serverError === "object") {
-      return Promise.reject(serverError);
+      return Promise.reject({ ...serverError, status: error.response?.status });
     }
     return Promise.reject({
       success: false,
       message: error.message || "Network error occurred",
       code: "NETWORK_ERROR",
+      status: error.response?.status,
     });
   },
 );

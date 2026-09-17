@@ -1,5 +1,7 @@
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import type { OrderItem, PosOrder } from "./order-api";
+import { roundCurrency } from "./order-payload";
+import { normalizeKg } from "./weight";
 
 export interface CartProduct {
   _id: string;
@@ -9,6 +11,17 @@ export interface CartProduct {
   price: number;
   imageUrl?: string;
   taxRate: number;
+  quantityAvailable?: number;
+  lineKey?: string;
+  markdownCode?: string;
+  batchId?: string;
+  batchNumber?: string;
+  expiryDate?: string;
+  basePrice?: number;
+  remainingMarkdownQuantity?: number;
+  sellingMode?: "FIXED" | "WEIGHT";
+  unitType?: string;
+  unitValue?: number;
 }
 
 export interface PosCartCustomer {
@@ -18,10 +31,12 @@ export interface PosCartCustomer {
   area?: string;
 }
 
-export type CartItem = { product: CartProduct; qty: number };
+export type CartItem = { product: CartProduct; qty: number; enteredQuantity?: string };
+
+export type QuantityUpdateResult = { success: true } | { success: false; error: string };
 
 type CheckoutInfo = {
-  payment: "Cash" | "UPI" | "Card" | "Wallet" | "Split";
+  payment: "Cash" | "UPI" | "Card" | "Wallet" | "Split" | "Paytm POS";
   delivery: "Home" | "Pickup" | "Walk-Out";
   orderId: string;
   orderObjectId: string;
@@ -36,13 +51,16 @@ type CartCtx = {
   items: CartItem[];
   customer: PosCartCustomer | null;
   activeOrderId: string | null;
-  add: (p: CartProduct) => void;
+  add: (p: CartProduct, quantity?: number, enteredQuantity?: string) => boolean;
+  setQuantity: (id: string, quantity: number, enteredQuantity?: string) => QuantityUpdateResult;
   inc: (id: string) => void;
   dec: (id: string) => void;
   remove: (id: string) => void;
   clear: () => void;
   setCustomer: (c: PosCartCustomer | null) => void;
   setActiveOrderId: (orderId: string | null) => void;
+  updateStockLevels: (stockByVariantId: Record<string, number>) => void;
+  updateMarkdownAvailability: (markdownCode: string, remainingQuantity: number) => void;
   loadHeldOrder: (order: PosOrder) => void;
   subtotal: number;
   discount: number;
@@ -69,11 +87,11 @@ const defaultCartState: PersistedCartState = {
   activeOrderId: null,
 };
 
-function readPersistedCartState(): PersistedCartState {
+function readPersistedCartState(storageKey: string): PersistedCartState {
   if (typeof window === "undefined") return defaultCartState;
 
   try {
-    const raw = window.sessionStorage.getItem(CART_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) return defaultCartState;
 
     const parsed = JSON.parse(raw) as Partial<PersistedCartState> | null;
@@ -87,22 +105,41 @@ function readPersistedCartState(): PersistedCartState {
   }
 }
 
-function persistCartState(state: PersistedCartState) {
+function persistCartState(state: PersistedCartState, storageKey: string) {
   if (typeof window === "undefined") return;
 
   if (state.items.length === 0 && !state.customer && !state.activeOrderId) {
-    window.sessionStorage.removeItem(CART_STORAGE_KEY);
+    window.sessionStorage.removeItem(storageKey);
     return;
   }
 
-  window.sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state));
+  window.sessionStorage.setItem(storageKey, JSON.stringify(state));
 }
 
-export function CartProvider({ children }: { children: ReactNode }) {
-  const [initialState] = useState<PersistedCartState>(readPersistedCartState);
+export function CartProvider({
+  children,
+  scopeKey = "",
+}: {
+  children: ReactNode;
+  scopeKey?: string;
+}) {
+  return (
+    <ScopedCartProvider
+      key={scopeKey}
+      storageKey={scopeKey ? `${CART_STORAGE_KEY}:${scopeKey}` : CART_STORAGE_KEY}
+    >
+      {children}
+    </ScopedCartProvider>
+  );
+}
+
+function ScopedCartProvider({ children, storageKey }: { children: ReactNode; storageKey: string }) {
+  const [initialState] = useState<PersistedCartState>(() => readPersistedCartState(storageKey));
   const [items, setItems] = useState<CartItem[]>(initialState.items);
   const [customer, setCustomerState] = useState<PosCartCustomer | null>(initialState.customer);
-  const [activeOrderId, setActiveOrderIdState] = useState<string | null>(initialState.activeOrderId);
+  const [activeOrderId, setActiveOrderIdState] = useState<string | null>(
+    initialState.activeOrderId,
+  );
   const [lastCheckout, setLastCheckout] = useState<CheckoutInfo | null>(null);
   const itemsRef = useRef(items);
   const customerRef = useRef(customer);
@@ -124,44 +161,170 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems(nextItems);
     setCustomerState(nextCustomer);
     setActiveOrderIdState(nextActiveOrderId);
-    persistCartState({
-      items: nextItems,
-      customer: nextCustomer,
-      activeOrderId: nextActiveOrderId,
-    });
+    persistCartState(
+      {
+        items: nextItems,
+        customer: nextCustomer,
+        activeOrderId: nextActiveOrderId,
+      },
+      storageKey,
+    );
   };
 
-  const add = (p: CartProduct) =>
+  const add = (p: CartProduct, quantity = 1, enteredQuantity?: string) => {
+    const lineKey = p.lineKey || p._id;
+    const normalized = { ...p, lineKey };
+    const normalizedQuantity = p.sellingMode === "WEIGHT" ? normalizeKg(quantity) : quantity;
+    if (!Number.isFinite(quantity) || normalizedQuantity <= 0) return false;
+    if (
+      p.sellingMode === "WEIGHT" &&
+      (quantity < 0.001 || Math.abs(quantity - normalizedQuantity) > 0.0000001)
+    ) {
+      return false;
+    }
+    if (p.sellingMode !== "WEIGHT" && !Number.isInteger(normalizedQuantity)) return false;
+    const existing = itemsRef.current.find(
+      (item) => (item.product.lineKey || item.product._id) === lineKey,
+    );
+    const limit = p.quantityAvailable;
+    if (
+      (limit !== undefined && limit <= 0) ||
+      (limit !== undefined && (existing?.qty ?? 0) + normalizedQuantity > limit + 0.000001)
+    ) {
+      return false;
+    }
+
+    const nextItems = existing
+      ? itemsRef.current.map((item) =>
+          (item.product.lineKey || item.product._id) === lineKey
+            ? {
+                ...item,
+                product: { ...item.product, ...normalized },
+                qty:
+                  p.sellingMode === "WEIGHT"
+                    ? normalizeKg(item.qty + normalizedQuantity)
+                    : item.qty + normalizedQuantity,
+                enteredQuantity,
+              }
+            : item,
+        )
+      : [...itemsRef.current, { product: normalized, qty: normalizedQuantity, enteredQuantity }];
+    commitCartState({ nextItems });
+    return true;
+  };
+  const setQuantity = (
+    id: string,
+    quantity: number,
+    enteredQuantity?: string,
+  ): QuantityUpdateResult => {
+    const item = itemsRef.current.find(
+      (entry) => (entry.product.lineKey || entry.product._id) === id,
+    );
+    if (!item) return { success: false, error: "Cart item was not found." };
+    const normalizedQuantity =
+      item.product.sellingMode === "WEIGHT" ? normalizeKg(quantity) : quantity;
+    if (!Number.isFinite(quantity) || normalizedQuantity <= 0)
+      return { success: false, error: "Quantity must be greater than zero." };
+    if (
+      item.product.sellingMode === "WEIGHT" &&
+      (quantity < 0.001 || Math.abs(quantity - normalizedQuantity) > 0.0000001)
+    ) {
+      return { success: false, error: "Weight must be at least 1g with at most 3 decimal places." };
+    }
+    if (item.product.sellingMode !== "WEIGHT" && !Number.isInteger(normalizedQuantity)) {
+      return { success: false, error: "Fixed products require a whole-number quantity." };
+    }
+    if (
+      item.product.quantityAvailable !== undefined &&
+      normalizedQuantity > item.product.quantityAvailable + 0.000001
+    ) {
+      return { success: false, error: `Only ${item.product.quantityAvailable} is available.` };
+    }
     commitCartState({
-      nextItems: (() => {
-        const ex = itemsRef.current.find((i) => i.product._id === p._id);
-        if (ex) {
-          return itemsRef.current.map((i) =>
-            i.product._id === p._id ? { ...i, qty: i.qty + 1 } : i,
-          );
-        }
-        return [...itemsRef.current, { product: p, qty: 1 }];
-      })(),
+      nextItems: itemsRef.current.map((entry) =>
+        (entry.product.lineKey || entry.product._id) === id
+          ? { ...entry, qty: normalizedQuantity, enteredQuantity }
+          : entry,
+      ),
     });
-  const inc = (id: string) =>
+    return { success: true };
+  };
+  const inc = (id: string) => {
+    const item = itemsRef.current.find(
+      (entry) => (entry.product.lineKey || entry.product._id) === id,
+    );
+    if (!item) return;
+    const limit = item.product.quantityAvailable;
+    const step = item.product.sellingMode === "WEIGHT" ? 0.1 : 1;
+    if (limit !== undefined && item.qty + step > limit + 0.000001) return;
     commitCartState({
-      nextItems: itemsRef.current.map((i) => (i.product._id === id ? { ...i, qty: i.qty + 1 } : i)),
+      nextItems: itemsRef.current.map((entry) =>
+        (entry.product.lineKey || entry.product._id) === id
+          ? {
+              ...entry,
+              qty:
+                entry.product.sellingMode === "WEIGHT"
+                  ? normalizeKg(entry.qty + step)
+                  : entry.qty + step,
+            }
+          : entry,
+      ),
     });
+  };
   const dec = (id: string) =>
     commitCartState({
       nextItems: itemsRef.current
-        .map((i) => (i.product._id === id ? { ...i, qty: i.qty - 1 } : i))
+        .map((i) => {
+          if ((i.product.lineKey || i.product._id) !== id) return i;
+          const step = i.product.sellingMode === "WEIGHT" ? 0.1 : 1;
+          return {
+            ...i,
+            qty: i.product.sellingMode === "WEIGHT" ? normalizeKg(i.qty - step) : i.qty - step,
+          };
+        })
         .filter((i) => i.qty > 0),
     });
   const remove = (id: string) =>
     commitCartState({
-      nextItems: itemsRef.current.filter((i) => i.product._id !== id),
+      nextItems: itemsRef.current.filter((i) => (i.product.lineKey || i.product._id) !== id),
     });
-  const clear = () => commitCartState({ nextItems: [], nextCustomer: null, nextActiveOrderId: null });
-  const setCustomer = (nextCustomer: PosCartCustomer | null) =>
-    commitCartState({ nextCustomer });
+  const clear = () =>
+    commitCartState({ nextItems: [], nextCustomer: null, nextActiveOrderId: null });
+  const setCustomer = (nextCustomer: PosCartCustomer | null) => commitCartState({ nextCustomer });
   const setActiveOrderId = (nextActiveOrderId: string | null) =>
     commitCartState({ nextActiveOrderId });
+  const updateStockLevels = (stockByVariantId: Record<string, number>) => {
+    commitCartState({
+      nextItems: itemsRef.current.map((item) =>
+        !item.product.markdownCode &&
+        Object.prototype.hasOwnProperty.call(stockByVariantId, item.product._id)
+          ? {
+              ...item,
+              product: {
+                ...item.product,
+                quantityAvailable: stockByVariantId[item.product._id],
+              },
+            }
+          : item,
+      ),
+    });
+  };
+  const updateMarkdownAvailability = (markdownCode: string, remainingQuantity: number) => {
+    commitCartState({
+      nextItems: itemsRef.current.map((item) =>
+        item.product.markdownCode === markdownCode
+          ? {
+              ...item,
+              product: {
+                ...item.product,
+                quantityAvailable: remainingQuantity,
+                remainingMarkdownQuantity: remainingQuantity,
+              },
+            }
+          : item,
+      ),
+    });
+  };
 
   const loadHeldOrder = (order: PosOrder) => {
     const nextItems = (order.items ?? []).map((item: OrderItem) => ({
@@ -174,12 +337,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
           item.variantName ||
           (typeof item.productVariantId === "object" ? item.productVariantId?.variantName : "") ||
           "Variant",
-        weight: typeof item.productVariantId === "object" ? item.productVariantId?.unitType || "" : "",
+        weight:
+          typeof item.productVariantId === "object" ? item.productVariantId?.unitType || "" : "",
         mrp: item.unitPrice,
         price: item.unitPrice,
         taxRate: item.taxRate || 0,
+        sellingMode: item.sellingMode || "FIXED",
+        unitType: item.quantityUnit || "PCS",
       },
       qty: item.quantity,
+      enteredQuantity: item.enteredQuantity,
     }));
 
     commitCartState({
@@ -199,20 +366,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const sub = items.reduce((s, i) => s + i.product.mrp * i.qty, 0);
     const disc = items.reduce((s, i) => s + (i.product.mrp - i.product.price) * i.qty, 0);
     const after = sub - disc;
-    const tx = items.reduce(
-      (s, i) => {
-        const rate = i.product.taxRate ?? 0;
-        // GST INCLUSIVE: extract tax from price, not add on top
-        return s + Math.round((i.product.price * i.qty * rate) / (100 + rate));
-      },
-      0,
-    );
+    const tx = items.reduce((s, i) => {
+      const rate = i.product.taxRate ?? 0;
+      // GST INCLUSIVE: extract tax from price, not add on top
+      return s + roundCurrency((i.product.price * i.qty * rate) / (100 + rate));
+    }, 0);
     return {
       subtotal: sub,
       discount: disc,
       afterDisc: after,
       tax: tx,
-      count: items.reduce((s, i) => s + i.qty, 0),
+      count: items.length,
     };
   }, [items]);
 
@@ -223,12 +387,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
         customer,
         activeOrderId,
         add,
+        setQuantity,
         inc,
         dec,
         remove,
         clear,
         setCustomer,
         setActiveOrderId,
+        updateStockLevels,
+        updateMarkdownAvailability,
         loadHeldOrder,
         subtotal,
         discount,

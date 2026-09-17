@@ -10,6 +10,18 @@ export interface ReplenishmentSuggestion {
   settingId: string;
 }
 
+export interface StoreInventoryRecord {
+  _id: string;
+  storeId: string | { _id: string; storeName?: string; storeCode?: string };
+  productVariantId: string | { _id: string; sku?: string; variantName?: string; unitType?: string };
+  currentStock: number;
+  reservedStock?: number;
+  availableStock?: number;
+  reorderLevel?: number;
+  status?: string;
+  [key: string]: unknown;
+}
+
 interface ApiResponse<T> {
   success: boolean;
   message?: string;
@@ -26,7 +38,7 @@ export const storeOpsApi = {
     ),
 
   listStoreInventory: (params?: Record<string, unknown>) =>
-    api.get<unknown, ApiResponse<any[]>>("/store-inventory/all", { params }),
+    api.get<unknown, ApiResponse<StoreInventoryRecord[]>>("/store-inventory/all", { params }),
 
   instantTransfer: (payload: {
     movementType: "STORE_TO_STORE";

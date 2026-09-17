@@ -1,10 +1,26 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { customerApi, type PosCustomer } from "@/lib/customer-api";
+import {
+  customerApi,
+  getCustomerAddress,
+  getCustomerMobile,
+  getCustomerOrderCount,
+  type PosCustomer,
+} from "@/lib/customer-api";
 import { orderApi, type PosOrder } from "@/lib/order-api";
+import { isCustomerBlocked } from "@/lib/customer-flow";
+import { getErrorMessage } from "@/lib/pos-page-state";
 import { formatINR } from "@/lib/utils";
 import { useCart, type PosCartCustomer } from "@/lib/cart-context";
-import { ArrowLeft, ArrowRight, CalendarDays, Loader2, ReceiptIndianRupee, ShoppingBag } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarDays,
+  Loader2,
+  RefreshCw,
+  ReceiptIndianRupee,
+  ShoppingBag,
+} from "lucide-react";
 import { z } from "zod";
 
 export const Route = createFileRoute("/_pos/customers/$customerId")({
@@ -15,7 +31,7 @@ export const Route = createFileRoute("/_pos/customers/$customerId")({
   component: CustomerDetailPage,
 });
 
-export function CustomerDetailPage() {
+function CustomerDetailPage() {
   const { customerId } = Route.useParams();
   const { setCustomer } = useCart();
   const navigate = useNavigate();
@@ -34,13 +50,14 @@ export function CustomerDetailPage() {
       const allOrders: PosOrder[] = [];
       let page = 1;
       let totalPages = 1;
+      const maxPages = 50;
 
       do {
         const response = await orderApi.list({ customerId, page, limit: 100 });
         allOrders.push(...((response.data ?? []) as PosOrder[]));
         totalPages = response.meta?.totalPages ?? 1;
         page += 1;
-      } while (page <= totalPages);
+      } while (page <= totalPages && page <= maxPages);
 
       return allOrders;
     },
@@ -50,14 +67,15 @@ export function CustomerDetailPage() {
 
   const customer = customerQuery.data?.data as PosCustomer | undefined;
   const orders = ordersQuery.data ?? [];
-  const isLoading = customerQuery.isLoading || ordersQuery.isLoading;
+  const isLoading = customerQuery.isLoading;
+  const isBlocked = isCustomerBlocked(customer?.status);
 
   const selectCustomer = () => {
-    if (!customer) return;
+    if (!customer || isCustomerBlocked(customer.status)) return;
     const cartCustomer: PosCartCustomer = {
       _id: customer._id,
       name: customer.name,
-      mobile: customer.mobile,
+      mobile: getCustomerMobile(customer),
       area: customer.area,
     };
     setCustomer(cartCustomer);
@@ -78,10 +96,24 @@ export function CustomerDetailPage() {
     return (
       <div className="h-full overflow-y-auto p-6">
         <div className="mx-auto max-w-4xl rounded-3xl border-2 bg-card p-8 text-center">
-          <h1 className="text-2xl font-extrabold">Customer not found</h1>
+          <h1 className="text-2xl font-extrabold">
+            {customerQuery.isError ? "Customer unavailable" : "Customer not found"}
+          </h1>
           <p className="mt-2 text-sm font-semibold text-muted-foreground">
-            The customer details could not be loaded.
+            {customerQuery.isError
+              ? getErrorMessage(customerQuery.error, "The customer details could not be loaded.")
+              : "The customer details could not be loaded."}
           </p>
+          {customerQuery.isError ? (
+            <button
+              type="button"
+              onClick={() => void customerQuery.refetch()}
+              className="mt-5 mr-2 inline-flex items-center gap-2 rounded-2xl bg-[var(--brand-green)] px-5 py-3 text-sm font-extrabold text-white"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry Details
+            </button>
+          ) : null}
           <Link
             to="/customers"
             search={returnTo ? { returnTo } : {}}
@@ -94,6 +126,9 @@ export function CustomerDetailPage() {
       </div>
     );
   }
+
+  const customerMobile = getCustomerMobile(customer);
+  const customerAddress = getCustomerAddress(customer);
 
   return (
     <div className="h-full overflow-y-auto p-5">
@@ -111,16 +146,20 @@ export function CustomerDetailPage() {
               </Link>
               <h1 className="mt-3 text-3xl font-extrabold tracking-tight">{customer.name}</h1>
               <p className="mt-1 text-sm font-semibold text-muted-foreground">
-                {customer.mobile} · {customer.area || "Area not added"}
-                {customer.pincode ? ` · ${customer.pincode}` : ""}
+                {customerMobile || "Mobile not provided"}
+                {customer.email ? ` · ${customer.email}` : ""}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                {customerAddress || "Address not provided"}
               </p>
             </div>
 
             <button
               onClick={selectCustomer}
-              className="tap-target-lg inline-flex items-center gap-2 rounded-2xl bg-[var(--brand-green)] px-5 text-sm font-extrabold text-white active:scale-[0.98]"
+              disabled={isBlocked}
+              className="tap-target-lg inline-flex items-center gap-2 rounded-2xl bg-[var(--brand-green)] px-5 text-sm font-extrabold text-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Select Customer
+              {isBlocked ? "Customer Blocked" : "Select Customer"}
               <ArrowRight className="h-4 w-4" strokeWidth={3} />
             </button>
           </div>
@@ -128,13 +167,13 @@ export function CustomerDetailPage() {
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <StatCard
               label="Number of Orders"
-              value={String(customer.ordersCount)}
+              value={String(getCustomerOrderCount(customer))}
               icon={ShoppingBag}
               color="var(--brand-blue)"
             />
             <StatCard
               label="Total Rupees"
-              value={formatINR(customer.totalSpend)}
+              value={formatINR(customer.totalSpend ?? 0)}
               icon={ReceiptIndianRupee}
               color="var(--brand-green)"
             />
@@ -160,11 +199,27 @@ export function CustomerDetailPage() {
               </p>
             </div>
             <span className="rounded-full bg-card px-3 py-1 text-xs font-bold text-muted-foreground">
-              {orders.length} loaded
+              {ordersQuery.isLoading ? "Loading" : `${orders.length} loaded`}
             </span>
           </div>
 
-          {orders.length === 0 ? (
+          {ordersQuery.isLoading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : ordersQuery.isError ? (
+            <div className="p-8 text-center text-sm font-semibold text-muted-foreground">
+              <p>{getErrorMessage(ordersQuery.error, "Order history could not be loaded.")}</p>
+              <button
+                type="button"
+                onClick={() => void ordersQuery.refetch()}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[var(--brand-blue)] px-4 py-2 text-xs font-extrabold text-white"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry Orders
+              </button>
+            </div>
+          ) : orders.length === 0 ? (
             <div className="p-8 text-center text-sm font-semibold text-muted-foreground">
               No orders found for this customer yet.
             </div>
@@ -181,7 +236,9 @@ export function CustomerDetailPage() {
                       {new Date(order.createdAt).toLocaleString("en-IN")}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-wide">
-                      <span className="rounded-md bg-[var(--secondary)] px-2 py-1">{order.status}</span>
+                      <span className="rounded-md bg-[var(--secondary)] px-2 py-1">
+                        {order.status}
+                      </span>
                       <span className="rounded-md bg-[var(--secondary)] px-2 py-1">
                         {order.paymentMode || "—"}
                       </span>
@@ -226,7 +283,10 @@ function StatCard({
   return (
     <div className="rounded-2xl border bg-[var(--secondary)]/35 p-4">
       <div className="flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl" style={{ backgroundColor: `${color}20` }}>
+        <div
+          className="grid h-10 w-10 place-items-center rounded-xl"
+          style={{ backgroundColor: `${color}20` }}
+        >
           <Icon className="h-5 w-5" style={{ color }} />
         </div>
         <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">

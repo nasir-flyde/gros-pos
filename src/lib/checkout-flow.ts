@@ -1,9 +1,12 @@
-import { buildCheckoutPayload, type CheckoutPayment, type CheckoutPayload } from "./order-payload";
+import {
+  buildCheckoutPayload,
+  calculatePayloadTotal,
+  roundCurrency,
+  type CheckoutPayment,
+  type CheckoutPayload,
+} from "./order-payload";
 
-export type PosPaymentSelection = "Cash" | "UPI" | "Card" | "Wallet" | "Split";
-
-export const roundCurrency = (value: number) =>
-  Math.round((value + Number.EPSILON) * 100) / 100;
+export type PosPaymentSelection = "Cash" | "UPI" | "Card" | "Wallet" | "Split" | "Paytm POS";
 
 export const buildSplitPaymentEntries = (
   splitPayments: Record<CheckoutPayment["paymentMode"], string>,
@@ -11,20 +14,28 @@ export const buildSplitPaymentEntries = (
   Object.entries(splitPayments)
     .map(([paymentMode, amount]) => ({
       paymentMode: paymentMode as CheckoutPayment["paymentMode"],
-      amount: Number(amount || 0),
+      amount: roundCurrency(Number(amount || 0)),
     }))
     .filter((payment) => payment.amount > 0);
 
-export const hasExactPaymentTotal = (
-  payments: CheckoutPayment[],
-  grandTotal: number,
-) => roundCurrency(payments.reduce((sum, payment) => sum + payment.amount, 0)) === roundCurrency(grandTotal);
+export const hasExactPaymentTotal = (payments: CheckoutPayment[], grandTotal: number) =>
+  roundCurrency(payments.reduce((sum, payment) => sum + payment.amount, 0)) ===
+  roundCurrency(grandTotal);
+
+export const getPayloadPaymentTotal = (payload: CheckoutPayload) =>
+  roundCurrency(payload.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0));
+
+export const hasMatchingPayloadPaymentTotal = (payload: CheckoutPayload) =>
+  getPayloadPaymentTotal(payload) === calculatePayloadTotal(payload);
 
 export const resolveCheckoutPayments = (
   payment: PosPaymentSelection,
   grandTotal: number,
   splitPayments: Record<CheckoutPayment["paymentMode"], string>,
 ): CheckoutPayment[] => {
+  if (payment === "Paytm POS") {
+    return [];
+  }
   if (payment === "Split") {
     return buildSplitPaymentEntries(splitPayments);
   }
@@ -40,8 +51,18 @@ export const resolveCheckoutPayments = (
   ];
 };
 
-interface BuildPosCheckoutPayloadArgs {
-  cartItems: Array<{ product: { _id: string; mrp: number; price: number; taxRate?: number }; qty: number }>;
+export interface BuildPosCheckoutPayloadArgs {
+  cartItems: Array<{
+    product: {
+      _id: string;
+      mrp: number;
+      price: number;
+      taxRate?: number;
+      markdownCode?: string;
+      basePrice?: number;
+    };
+    qty: number;
+  }>;
   payment: PosPaymentSelection;
   grandTotal: number;
   splitPayments: Record<CheckoutPayment["paymentMode"], string>;
@@ -51,6 +72,7 @@ interface BuildPosCheckoutPayloadArgs {
   charges: { delivery: number; discount: number; discountPercent?: number };
   customerId?: string;
   orderId?: string;
+  quoteVersion?: string | null;
 }
 
 export const buildPosCheckoutPayload = ({
@@ -64,8 +86,9 @@ export const buildPosCheckoutPayload = ({
   charges,
   customerId,
   orderId,
-}: BuildPosCheckoutPayloadArgs): CheckoutPayload =>
-  buildCheckoutPayload(
+  quoteVersion,
+}: BuildPosCheckoutPayloadArgs): CheckoutPayload => ({
+  ...buildCheckoutPayload(
     cartItems,
     resolveCheckoutPayments(payment, grandTotal, splitPayments),
     deliveryType,
@@ -74,4 +97,26 @@ export const buildPosCheckoutPayload = ({
     charges,
     customerId,
     orderId,
+  ),
+  ...(quoteVersion ? { quoteVersion } : {}),
+});
+
+export const buildPaytmPosRequestPayload = (
+  args: Omit<BuildPosCheckoutPayloadArgs, "payment" | "splitPayments">,
+): Omit<CheckoutPayload, "payments"> => {
+  const payload = buildCheckoutPayload(
+    args.cartItems,
+    [],
+    args.deliveryType,
+    args.storeId,
+    args.cashierId,
+    args.charges,
+    args.customerId,
+    args.orderId,
   );
+  const { payments: _payments, ...paytmPayload } = payload;
+  return {
+    ...paytmPayload,
+    ...(args.quoteVersion ? { quoteVersion: args.quoteVersion } : {}),
+  };
+};

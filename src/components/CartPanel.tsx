@@ -1,5 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useCart } from "@/lib/cart-context";
+import { useCart, type CartItem } from "@/lib/cart-context";
+import { WeightEntryDialog } from "@/components/WeightEntryDialog";
+import { formatWeight } from "@/lib/weight";
 import { orderApi } from "@/lib/order-api";
 import { formatINR } from "@/lib/utils";
 import { Plus, Minus, Trash2, Pause, ArrowRight, Package } from "lucide-react";
@@ -12,6 +14,7 @@ export function CartPanel() {
     inc,
     dec,
     remove,
+    setQuantity,
     subtotal,
     discount,
     afterDisc,
@@ -22,10 +25,13 @@ export function CartPanel() {
     activeOrderId,
     setActiveOrderId,
   } = useCart();
+  const hasMarkdown = items.some((item) => Boolean(item.product.markdownCode));
   // GST is inclusive in afterDisc — do NOT add tax again
   const cartTotal = afterDisc;
   const navigate = useNavigate();
   const [holding, setHolding] = useState(false);
+  const [editingWeight, setEditingWeight] = useState<CartItem | null>(null);
+  const canHoldOrder = Boolean(activeOrderId) && items.length > 0 && !holding && !hasMarkdown;
 
   const holdCurrentOrder = async () => {
     if (!activeOrderId) {
@@ -52,116 +58,190 @@ export function CartPanel() {
   };
 
   return (
-    <aside className="flex w-full max-w-[420px] shrink-0 flex-col overflow-hidden border-l-2 bg-card lg:w-[38%]">
-      <div className="flex items-center justify-between border-b bg-[var(--brand-blue)] px-4 py-3 text-white">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
-            Current Cart
-          </div>
-          <div className="text-lg font-extrabold leading-tight">
-            {count} {count === 1 ? "item" : "items"}
-          </div>
-        </div>
-        <Link
-          to="/customers"
-          search={{ returnTo: "/new-order" }}
-          className="tap-target flex items-center justify-center rounded-xl bg-white/15 px-3 py-1.5 text-sm font-bold text-white active:scale-[0.97]"
-        >
-          {customer ? customer.name.split(" ")[0] : "+ Customer"}
-        </Link>
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
-        {items.length === 0 ? (
-          <div className="grid h-full place-items-center p-6 text-center text-muted-foreground">
-            <div>
-              <div className="text-6xl">🛒</div>
-              <div className="mt-3 text-base font-bold text-foreground">Cart is empty</div>
-              <div className="mt-1 text-sm">Scan or tap products to start billing</div>
+    <>
+      <aside className="flex w-full max-w-[420px] shrink-0 flex-col overflow-hidden border-l-2 bg-card lg:w-[38%]">
+        <div className="flex items-center justify-between border-b bg-[var(--brand-blue)] px-4 py-3 text-white">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-white/70">
+              Current Cart
+            </div>
+            <div className="text-lg font-extrabold leading-tight">
+              {count} {count === 1 ? "cart line" : "cart lines"}
             </div>
           </div>
-        ) : (
-          <ul className="divide-y">
-            {items.map((i) => (
-              <li key={i.product._id} className="flex items-start gap-3 px-4 py-3">
-                <ImagePreview src={i.product.imageUrl} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold leading-tight">{i.product.name}</div>
-                  <div className="text-[11px] font-semibold text-muted-foreground">
-                    {i.product.weight} · {formatINR(i.product.price)}
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <button
-                      onClick={() => dec(i.product._id)}
-                      className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--secondary)] active:scale-95"
-                    >
-                      <Minus className="h-4 w-4" strokeWidth={3} />
-                    </button>
-                    <span className="min-w-[2.5rem] text-center text-base font-extrabold tabular-nums">
-                      {i.qty}
-                    </span>
-                    <button
-                      onClick={() => inc(i.product._id)}
-                      className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--brand-blue)] text-white active:scale-95"
-                    >
-                      <Plus className="h-4 w-4" strokeWidth={3} />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <div className="text-base font-extrabold tabular-nums">
-                    {formatINR(i.product.price * i.qty)}
-                  </div>
-                  <button
-                    onClick={() => remove(i.product._id)}
-                    className="grid h-9 w-9 place-items-center rounded-lg text-[var(--brand-red)] hover:bg-[var(--brand-red)]/10"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="border-t bg-[var(--surface)] px-4 py-3 text-sm">
-        <Row label="Subtotal (MRP)" value={formatINR(subtotal)} />
-        <Row label="Discount" value={"– " + formatINR(discount)} positive />
-        <Row label="GST (Included)" value={formatINR(tax)} />
-        <div className="mt-2 flex items-baseline justify-between border-t pt-2">
-          <div className="text-sm font-bold uppercase tracking-wide">Grand Total</div>
-          <div className="text-2xl font-extrabold tabular-nums">{formatINR(cartTotal)}</div>
+          <Link
+            to="/customers"
+            search={{ returnTo: "/new-order" }}
+            className="tap-target flex items-center justify-center rounded-xl bg-white/15 px-3 py-1.5 text-sm font-bold text-white active:scale-[0.97]"
+          >
+            {customer ? customer.name.split(" ")[0] : "+ Customer"}
+          </Link>
         </div>
-      </div>
 
-      <div className="grid grid-cols-[auto_auto_1fr] gap-2 border-t bg-card p-3">
-        <button
-          disabled={items.length === 0}
-          onClick={() => clear()}
-          className="tap-target-lg grid place-items-center rounded-xl bg-[var(--secondary)] px-3 font-bold text-foreground disabled:opacity-40 active:scale-[0.97]"
-          aria-label="Clear cart"
-        >
-          <Trash2 className="h-5 w-5" />
-        </button>
-        <button
-          disabled={items.length === 0}
-          onClick={holdCurrentOrder}
-          className="tap-target-lg grid place-items-center rounded-xl bg-[var(--brand-orange)] px-3 font-bold text-white disabled:opacity-40 active:scale-[0.97]"
-          aria-label="Hold order"
-        >
-          <Pause className={"h-5 w-5 " + (holding ? "animate-pulse" : "")} />
-        </button>
-        <button
-          disabled={items.length === 0}
-          onClick={() => navigate({ to: "/checkout" })}
-          className="tap-target-lg flex min-h-[80px] items-center justify-center gap-3 rounded-xl bg-[var(--brand-green)] text-lg font-extrabold text-white shadow-md disabled:opacity-40 active:scale-[0.98]"
-        >
-          <span>Checkout · {formatINR(cartTotal)}</span>
-          <ArrowRight className="h-6 w-6" strokeWidth={3} />
-        </button>
-      </div>
-    </aside>
+        <div className="flex-1 overflow-y-auto">
+          {items.length === 0 ? (
+            <div className="grid h-full place-items-center p-6 text-center text-muted-foreground">
+              <div>
+                <div className="text-6xl">🛒</div>
+                <div className="mt-3 text-base font-bold text-foreground">Cart is empty</div>
+                <div className="mt-1 text-sm">Scan or tap products to start billing</div>
+              </div>
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {items.map((i) => (
+                <li
+                  key={i.product.lineKey || i.product._id}
+                  className="flex items-start gap-3 px-4 py-3"
+                >
+                  <ImagePreview src={i.product.imageUrl} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-bold leading-tight">{i.product.name}</div>
+                    {i.product.markdownCode ? (
+                      <div className="mt-1 inline-flex rounded bg-[var(--brand-orange)] px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                        MARKDOWN · {i.product.batchNumber}
+                      </div>
+                    ) : null}
+                    <div className="text-[11px] font-semibold text-muted-foreground">
+                      {i.product.sellingMode === "WEIGHT"
+                        ? `Rate: ${formatINR(i.product.price)} per KG`
+                        : `${i.product.weight} · ${formatINR(i.product.price)}`}
+                    </div>
+                    {i.product.quantityAvailable !== undefined ? (
+                      <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
+                        {i.product.sellingMode === "WEIGHT"
+                          ? `${formatWeight(i.product.quantityAvailable)} available`
+                          : `${i.product.quantityAvailable} available`}
+                      </div>
+                    ) : null}
+                    {i.product.sellingMode === "WEIGHT" ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="rounded-lg bg-secondary px-3 py-2 text-base font-extrabold tabular-nums">
+                          {formatWeight(i.qty)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingWeight(i)}
+                          className="rounded-lg bg-[var(--brand-blue)] px-3 py-2 text-sm font-bold text-white"
+                        >
+                          Edit Weight
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          onClick={() => dec(i.product.lineKey || i.product._id)}
+                          className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--secondary)] active:scale-95"
+                        >
+                          <Minus className="h-4 w-4" strokeWidth={3} />
+                        </button>
+                        <span className="min-w-[2.5rem] text-center text-base font-extrabold tabular-nums">
+                          {i.qty}
+                        </span>
+                        <button
+                          onClick={() => inc(i.product.lineKey || i.product._id)}
+                          disabled={
+                            i.product.quantityAvailable !== undefined &&
+                            i.qty >= i.product.quantityAvailable
+                          }
+                          title={
+                            i.product.quantityAvailable !== undefined &&
+                            i.qty >= i.product.quantityAvailable
+                              ? "Maximum available stock is already in the cart"
+                              : "Increase quantity"
+                          }
+                          className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--brand-blue)] text-white disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+                        >
+                          <Plus className="h-4 w-4" strokeWidth={3} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="text-base font-extrabold tabular-nums">
+                      {formatINR(i.product.price * i.qty)}
+                    </div>
+                    <button
+                      onClick={() => remove(i.product.lineKey || i.product._id)}
+                      className="grid h-9 w-9 place-items-center rounded-lg text-[var(--brand-red)] hover:bg-[var(--brand-red)]/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="border-t bg-[var(--surface)] px-4 py-3 text-sm">
+          <Row label="Subtotal (MRP)" value={formatINR(subtotal)} />
+          <Row label="Discount" value={"– " + formatINR(discount)} positive />
+          <Row label="GST (Included)" value={formatINR(tax)} />
+          <div className="mt-2 flex items-baseline justify-between border-t pt-2">
+            <div className="text-sm font-bold uppercase tracking-wide">Grand Total</div>
+            <div className="text-2xl font-extrabold tabular-nums">{formatINR(cartTotal)}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-[auto_auto_1fr] gap-2 border-t bg-card p-3">
+          <button
+            disabled={items.length === 0}
+            onClick={() => clear()}
+            className="tap-target-lg grid place-items-center rounded-xl bg-[var(--secondary)] px-3 font-bold text-foreground disabled:opacity-40 active:scale-[0.97]"
+            aria-label="Clear cart"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
+          <button
+            disabled={!canHoldOrder}
+            onClick={holdCurrentOrder}
+            title={
+              hasMarkdown
+                ? "Markdown-labelled stock cannot be placed on hold"
+                : activeOrderId
+                  ? "Hold this resumed order"
+                  : "Hold is available only after resuming an existing backend order"
+            }
+            className="tap-target-lg grid place-items-center rounded-xl bg-[var(--brand-orange)] px-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.97]"
+            aria-label="Hold order"
+          >
+            <Pause className={"h-5 w-5 " + (holding ? "animate-pulse" : "")} />
+          </button>
+          <button
+            disabled={items.length === 0}
+            onClick={() => navigate({ to: "/checkout" })}
+            className="tap-target-lg flex min-h-[80px] items-center justify-center gap-3 rounded-xl bg-[var(--brand-green)] text-lg font-extrabold text-white shadow-md disabled:opacity-40 active:scale-[0.98]"
+          >
+            <span>Checkout · {formatINR(cartTotal)}</span>
+            <ArrowRight className="h-6 w-6" strokeWidth={3} />
+          </button>
+        </div>
+      </aside>
+      {editingWeight ? (
+        <WeightEntryDialog
+          open
+          productName={editingWeight.product.name}
+          pricePerKg={editingWeight.product.price}
+          availableKg={editingWeight.product.quantityAvailable}
+          initialKg={editingWeight.qty}
+          actionLabel="Update Weight"
+          onClose={() => setEditingWeight(null)}
+          onConfirm={(kilograms, enteredQuantity) => {
+            const result = setQuantity(
+              editingWeight.product.lineKey || editingWeight.product._id,
+              kilograms,
+              enteredQuantity,
+            );
+            if (!result.success) {
+              toast.error(result.error);
+              return;
+            }
+            setEditingWeight(null);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 

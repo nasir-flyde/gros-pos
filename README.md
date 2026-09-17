@@ -13,6 +13,7 @@ POS frontend for the GROS backend.
 
 - `VITE_API_URL` points to the GROS backend base path. Default: `http://localhost:5002/api/v1`
 - Clerk authentication must be configured in the app environment used by `auth-provider.tsx`.
+- Production builds require an explicit HTTPS API URL ending in `/api/v1` and a Clerk publishable key. Preview/test Clerk keys are supported; deployment values remain repository-specific. Gros builds target Vercel.
 
 ## API Expectations
 

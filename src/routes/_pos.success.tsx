@@ -1,8 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useCart } from "@/lib/cart-context";
-import { normalizeReceiptData, isReceiptPrintable, type ReceiptStatus } from "@/lib/receipt";
+import {
+  normalizeReceiptData,
+  isReceiptPrintable,
+  type NormalizedReceipt,
+  type ReceiptStatus,
+} from "@/lib/receipt";
 import { printNormalizedReceipt } from "@/lib/receipt-print";
+import { fetchAndPrintOrderReceiptHtml } from "@/lib/order-receipt";
 import { CheckCircle2, Printer, Bike, Plus, Download } from "lucide-react";
 import { ReceiptPrintContent } from "@/components/receipt/receipt-print-content";
 
@@ -12,7 +18,7 @@ export const Route = createFileRoute("/_pos/success")({
 });
 
 type SavedCheckout = {
-  payment: "Cash" | "UPI" | "Card" | "Wallet" | "Split";
+  payment: "Cash" | "UPI" | "Card" | "Wallet" | "Split" | "Paytm POS";
   delivery: "Home" | "Pickup" | "Walk-Out";
   orderId: string;
   orderObjectId?: string;
@@ -39,7 +45,24 @@ function getSavedCheckout() {
   }
 }
 
-export function SuccessPage() {
+async function printCheckoutReceipt(
+  orderObjectId: string | undefined,
+  receipt: NormalizedReceipt,
+): Promise<boolean> {
+  if (orderObjectId) {
+    try {
+      if (await fetchAndPrintOrderReceiptHtml(orderObjectId)) {
+        return true;
+      }
+    } catch {
+      // The checkout JSON keeps printing available if backend HTML is delayed.
+    }
+  }
+
+  return printNormalizedReceipt(receipt);
+}
+
+function SuccessPage() {
   const { lastCheckout } = useCart();
   const navigate = useNavigate();
   const savedCheckout = useMemo(() => getSavedCheckout(), []);
@@ -61,33 +84,32 @@ export function SuccessPage() {
   }, [checkout]);
 
   const downloadTriggered = useRef(false);
+  const printReceipt = async () => {
+    if (!receipt) return false;
+    return printCheckoutReceipt(checkout?.orderObjectId, receipt);
+  };
+
   useEffect(() => {
     if (downloadTriggered.current) return;
     if (!receipt || !isReceiptPrintable(checkout?.receiptStatus)) return;
 
     const timer = setTimeout(() => {
-      void printNormalizedReceipt(receipt).then((printed) => {
+      void printCheckoutReceipt(checkout?.orderObjectId, receipt).then((printed) => {
         if (printed) {
           downloadTriggered.current = true;
         }
       });
     }, 800);
     return () => clearTimeout(timer);
-  }, [checkout?.receiptStatus, receipt]);
+  }, [checkout?.receiptStatus, checkout?.orderObjectId, receipt]);
 
   const receiptStatus = checkout?.receiptStatus;
   const receiptUnavailable = receiptStatus === "unavailable";
   const receiptPending = receiptStatus === "pending_fulfillment";
   const receiptWarning = checkout?.receiptWarning;
 
-  const printReceipt = async () => {
-    if (!receipt) return;
-    await printNormalizedReceipt(receipt);
-  };
-
   const downloadReceipt = async () => {
-    if (!receipt) return;
-    if (await printNormalizedReceipt(receipt)) {
+    if (await printReceipt()) {
       downloadTriggered.current = true;
     }
   };
@@ -173,9 +195,7 @@ export function SuccessPage() {
             <CheckCircle2 className="h-14 w-14" strokeWidth={2.5} />
           </div>
           <h1 className="mt-4 text-3xl font-extrabold tracking-tight">Order Placed!</h1>
-          <p className="mt-1 text-sm font-semibold text-muted-foreground">
-            Receipt ready to print
-          </p>
+          <p className="mt-1 text-sm font-semibold text-muted-foreground">Receipt ready to print</p>
 
           <ReceiptPrintContent receipt={receipt} className="mt-6" />
 
@@ -198,7 +218,12 @@ export function SuccessPage() {
                 color="var(--brand-orange)"
                 icon={Bike}
                 label="Assign Rider"
-                onClick={() => navigate({ to: "/delivery", search: { orderId: checkout?.orderObjectId ?? receipt.orderId } })}
+                onClick={() =>
+                  navigate({
+                    to: "/delivery",
+                    search: { orderId: checkout?.orderObjectId ?? receipt.orderId },
+                  })
+                }
               />
             )}
             <Action color="var(--brand-red)" icon={Plus} label="New Order" to="/new-order" />
