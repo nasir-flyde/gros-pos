@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { orderApi, type PosOrder } from "@/lib/order-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { useCart } from "@/lib/cart-context";
+import { getErrorMessage } from "@/lib/pos-page-state";
 import { formatINR } from "@/lib/utils";
-import { Play, Trash2, Clock, Loader2 } from "lucide-react";
+import { Play, Trash2, Clock, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -23,7 +24,7 @@ function HoldPage() {
   const { loadHeldOrder } = useCart();
   const navigate = useNavigate();
 
-  const { data: listRes, isLoading } = useQuery({
+  const heldOrdersQuery = useQuery({
     queryKey: ["held-orders", storeId],
     queryFn: () =>
       orderApi.list({
@@ -32,6 +33,7 @@ function HoldPage() {
         limit: 50,
       }),
     staleTime: 10_000,
+    enabled: !!storeId,
   });
 
   const resumeMutation = useMutation({
@@ -46,11 +48,7 @@ function HoldPage() {
       navigate({ to: "/checkout" });
     },
     onError: (error: unknown) => {
-      const message =
-        typeof error === "object" && error && "message" in error
-          ? String(error.message)
-          : "Failed to resume held order";
-      toast.error(message);
+      toast.error(getErrorMessage(error, "Failed to resume held order"));
     },
   });
 
@@ -60,15 +58,11 @@ function HoldPage() {
       queryClient.invalidateQueries({ queryKey: ["held-orders"] });
     },
     onError: (error: unknown) => {
-      const message =
-        typeof error === "object" && error && "message" in error
-          ? String(error.message)
-          : "Failed to cancel held order";
-      toast.error(message);
+      toast.error(getErrorMessage(error, "Failed to cancel held order"));
     },
   });
 
-  const orders: PosOrder[] = listRes?.data ?? [];
+  const orders: PosOrder[] = heldOrdersQuery.data?.data ?? [];
 
   return (
     <div className="h-full overflow-y-auto p-5">
@@ -78,9 +72,25 @@ function HoldPage() {
       </p>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {isLoading ? (
+        {heldOrdersQuery.isLoading ? (
           <div className="col-span-full flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : heldOrdersQuery.isError ? (
+          <div className="col-span-full rounded-2xl border-2 border-[var(--brand-red)]/30 bg-card p-8 text-center text-muted-foreground">
+            <Clock className="mx-auto h-10 w-10 text-[var(--brand-red)]" />
+            <div className="mt-2 font-extrabold text-foreground">Held orders unavailable</div>
+            <p className="mt-1 text-sm font-semibold">
+              {getErrorMessage(heldOrdersQuery.error, "Held orders could not be loaded.")}
+            </p>
+            <button
+              type="button"
+              onClick={() => void heldOrdersQuery.refetch()}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[var(--brand-blue)] px-5 py-3 text-sm font-extrabold text-white"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry Held Orders
+            </button>
           </div>
         ) : orders.length === 0 ? (
           <div className="col-span-full py-16 text-center text-muted-foreground">

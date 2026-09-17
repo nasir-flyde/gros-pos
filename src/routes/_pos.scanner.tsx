@@ -1,11 +1,21 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getEffectiveVariantPrice, getPosImageUrl, productApi } from "@/lib/product-api";
 import { formatINR } from "@/lib/utils";
-import { useCart, type CartProduct } from "@/lib/cart-context";
+import { useCart } from "@/lib/cart-context";
 import { useAuthStore } from "@/lib/auth-store";
 import { CartPanel } from "@/components/CartPanel";
+import { WeightEntryDialog } from "@/components/WeightEntryDialog";
+import { formatWeight } from "@/lib/weight";
+import {
+  buildMarkdownCartProduct,
+  buildScannedCartProduct,
+  getCameraErrorMessage,
+  getScannerCartState,
+  normalizeBarcodeInput,
+} from "@/lib/scanner-flow";
+import { getMarkdownErrorMessage, isMarkdownCode, markdownApi } from "@/lib/markdown-api";
 import { ScanLine, Plus, Minus, Camera, CameraOff, Package, Search, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,41 +50,75 @@ function ScannerPage() {
   const [cameraActive, setCameraActive] = useState(false);
   const [scanningActive, setScanningActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [weightDialogOpen, setWeightDialogOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const detectorRef = useRef<{
     detect: (v: HTMLCanvasElement) => Promise<Array<{ rawValue: string }>>;
   } | null>(null);
   const detectedRef = useRef(false);
-  const { add, inc, dec, items, count } = useCart();
+  const { add, inc, dec, items, count, activeOrderId } = useCart();
   const scopes = useAuthStore((s) => s.scopes);
   const storeId = scopes.find((s) => s.type === "store")?.id ?? "";
-  const navigate = useNavigate();
 
   const supportsDetector = typeof window !== "undefined" && "BarcodeDetector" in window;
+  const hasLookupBarcode = barcodeInput.length >= 6;
 
   const {
     data: variant,
     isFetching,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["barcode", barcodeInput, storeId],
-    queryFn: () => productApi.getVariantByBarcode(barcodeInput, storeId).then((r) => r.data),
-    enabled: barcodeInput.length >= 6,
+    queryFn: async () => {
+      if (!isMarkdownCode(barcodeInput)) {
+        const resolved = await productApi.getVariantByBarcode(barcodeInput, storeId);
+        return { variant: resolved.data, markdown: null };
+      }
+      if (activeOrderId) throw new Error("Markdown stock cannot be added to a resumed held order.");
+      const markdown = (await markdownApi.resolveLabel(storeId, barcodeInput)).data;
+      const variants = await productApi.getStoreVariantStock([markdown.productVariantId], storeId);
+      if (!variants[0]) throw new Error("The product for this markdown label is unavailable.");
+      if (variants[0].sellingMode === "WEIGHT") {
+        throw new Error("Markdown labels for manually weighed products are not supported yet.");
+      }
+      return { variant: variants[0], markdown };
+    },
+    enabled: hasLookupBarcode,
     retry: false,
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
-  const scannedVariant = variant ?? null;
-  const scannedOutOfStock =
-    scannedVariant?.quantityAvailable !== undefined && scannedVariant.quantityAvailable <= 0;
-  const cartLine = scannedVariant ? items.find((i) => i.product._id === scannedVariant._id) : null;
-
-  const cartTotal = items.reduce((s, i) => s + i.product.price * i.qty, 0);
-  const scannedSellPrice = scannedVariant ? getEffectiveVariantPrice(scannedVariant) : 0;
+  const lookupResult = hasLookupBarcode ? variant : undefined;
+  const scannedMarkdown = lookupResult?.markdown ?? null;
+  const scannedVariant = useMemo(
+    () =>
+      lookupResult?.variant
+        ? {
+            ...lookupResult.variant,
+            quantityAvailable:
+              scannedMarkdown?.remainingQuantity ?? lookupResult.variant.quantityAvailable,
+          }
+        : null,
+    [lookupResult?.variant, scannedMarkdown?.remainingQuantity],
+  );
+  const scannerCartState = useMemo(
+    () => getScannerCartState(scannedVariant, items, scannedMarkdown?.markdownCode),
+    [items, scannedMarkdown?.markdownCode, scannedVariant],
+  );
+  const scannedOutOfStock = scannerCartState.outOfStock;
+  const scannedAtStockLimit = scannerCartState.atStockLimit;
+  const cartLine = scannerCartState.cartLine;
+  const scannedSellPrice =
+    scannedMarkdown?.effectivePrice ??
+    (scannedVariant ? getEffectiveVariantPrice(scannedVariant) : 0);
 
   // ── Detection loop (exact same as barcode-scanner) ─────────────────
   const stopDetectionLoop = useCallback(() => {
@@ -145,6 +189,10 @@ function ScannerPage() {
   const startCamera = useCallback(async () => {
     setCameraError(null);
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError("Camera is not available in this browser. Type barcode manually.");
+        return;
+      }
       if (supportsDetector && !detectorRef.current && BcDetector) {
         detectorRef.current = new BcDetector({ formats: SUPPORTED_FORMATS });
       }
@@ -156,13 +204,7 @@ function ScannerPage() {
       setCameraActive(true);
     } catch (err: unknown) {
       const e = err as { name?: string };
-      if (e.name === "NotAllowedError") {
-        setCameraError("Camera permission denied. Allow camera access or type barcode manually.");
-      } else if (e.name === "NotFoundError") {
-        setCameraError("No camera found on this device.");
-      } else {
-        setCameraError("Could not access camera. Use manual barcode input.");
-      }
+      setCameraError(getCameraErrorMessage(e.name));
     }
   }, [supportsDetector]);
 
@@ -191,6 +233,12 @@ function ScannerPage() {
   // Cleanup on unmount
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  useEffect(() => {
+    if (!scannedVariant && !isFetching && barcodeInput.length === 0) {
+      barcodeInputRef.current?.focus({ preventScroll: true });
+    }
+  }, [barcodeInput.length, isFetching, scannedVariant]);
+
   // ── On lookup result, stop camera (found or not) ────────────────────
   useEffect(() => {
     if (!isFetching && barcodeInput.length >= 6) {
@@ -203,33 +251,54 @@ function ScannerPage() {
   }, [isFetching, barcodeInput, stopCamera, scannedVariant, scannedOutOfStock]);
 
   // ── Add to cart ─────────────────────────────────────────────────────
-  const addScanned = useCallback(() => {
-    if (!scannedVariant || scannedOutOfStock) return;
-    const p: CartProduct = {
-      _id: scannedVariant._id,
-      name: scannedVariant.variantName,
-      weight: `${scannedVariant.unitValue} ${scannedVariant.unitType}`,
-      mrp: scannedVariant.mrp ?? 0,
-      price: scannedSellPrice,
-      imageUrl: getPosImageUrl(scannedVariant),
-      taxRate: scannedVariant.taxRate ?? 0,
-    };
-    add(p);
-    setBarcodeInput("");
-  }, [scannedSellPrice, scannedVariant, scannedOutOfStock, add]);
+  const addScanned = useCallback(
+    (quantity = 1, enteredQuantity?: string) => {
+      if (!scannedVariant) return false;
+      if (!scannerCartState.canAdd) {
+        if (scannerCartState.message) toast.error(scannerCartState.message);
+        return false;
+      }
+      const p = scannedMarkdown
+        ? buildMarkdownCartProduct(scannedVariant, scannedMarkdown)
+        : buildScannedCartProduct(scannedVariant);
+      const added = add(p, quantity, enteredQuantity);
+      if (!added) {
+        toast.error(`Only ${scannedVariant.quantityAvailable ?? 0} available`);
+        return false;
+      }
+      setBarcodeInput("");
+      return true;
+    },
+    [add, scannedMarkdown, scannedVariant, scannerCartState.canAdd, scannerCartState.message],
+  );
 
   // ── Auto-add to cart on successful scan ──────────────────────────────
   useEffect(() => {
-    if (scannedVariant && !isFetching && !scannedOutOfStock) {
-      addScanned();
-      toast.success(`Added ${scannedVariant.variantName} to cart`);
+    if (scannedVariant && !isFetching && scannerCartState.canAdd) {
+      if (scannedVariant.sellingMode === "WEIGHT" && !scannedMarkdown) {
+        setWeightDialogOpen(true);
+        stopCamera();
+        return;
+      }
+      if (addScanned()) {
+        toast.success(`Added ${scannedVariant.variantName} to cart`);
+      }
       // Reset scanner for next item
       detectedRef.current = false;
       if (cameraActive) {
         startDetectionLoop();
       }
     }
-  }, [scannedVariant, isFetching, scannedOutOfStock, addScanned, cameraActive, startDetectionLoop]);
+  }, [
+    scannedVariant,
+    isFetching,
+    scannerCartState.canAdd,
+    addScanned,
+    cameraActive,
+    startDetectionLoop,
+    scannedMarkdown,
+    stopCamera,
+  ]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -364,12 +433,19 @@ function ScannerPage() {
                       </span>
                     )}
                   </div>
+                  {scannedMarkdown ? (
+                    <div className="mt-2 rounded-lg bg-[var(--brand-orange)]/10 px-3 py-2 text-xs font-bold text-[var(--brand-orange)]">
+                      Markdown · Batch {scannedMarkdown.batchNumber} · expires{" "}
+                      {new Date(scannedMarkdown.expiryDate).toLocaleDateString("en-IN")} ·{" "}
+                      {scannedMarkdown.remainingQuantity} left
+                    </div>
+                  ) : null}
                 </div>
                 {/* Actions */}
                 {cartLine ? (
                   <div className="mt-4 flex items-center justify-center gap-4">
                     <button
-                      onClick={() => dec(scannedVariant._id)}
+                      onClick={() => dec(scannedMarkdown?.markdownCode || scannedVariant._id)}
                       className="grid h-12 w-12 place-items-center rounded-xl bg-[var(--secondary)] active:scale-95"
                     >
                       <Minus className="h-5 w-5" strokeWidth={3} />
@@ -378,7 +454,13 @@ function ScannerPage() {
                       {cartLine.qty}
                     </span>
                     <button
-                      onClick={() => inc(scannedVariant._id)}
+                      onClick={() => inc(scannedMarkdown?.markdownCode || scannedVariant._id)}
+                      disabled={scannedAtStockLimit}
+                      title={
+                        scannedAtStockLimit
+                          ? "Maximum available stock is already in the cart"
+                          : "Increase quantity"
+                      }
                       className="grid h-12 w-12 place-items-center rounded-xl bg-[var(--brand-blue)] text-white active:scale-95"
                     >
                       <Plus className="h-5 w-5" strokeWidth={3} />
@@ -386,8 +468,11 @@ function ScannerPage() {
                   </div>
                 ) : (
                   <button
-                    onClick={addScanned}
-                    disabled={scannedOutOfStock}
+                    onClick={() => {
+                      if (scannedVariant.sellingMode === "WEIGHT") setWeightDialogOpen(true);
+                      else addScanned();
+                    }}
+                    disabled={!scannerCartState.canAdd}
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-green)] py-4 text-lg font-extrabold text-white active:scale-[0.98] disabled:opacity-50"
                   >
                     <Plus className="h-6 w-6" strokeWidth={3} /> Add to Cart
@@ -415,14 +500,17 @@ function ScannerPage() {
               <div className="flex items-center gap-2 rounded-2xl border-2 border-white/20 bg-white/10 px-4 py-3 backdrop-blur">
                 <Search className="h-5 w-5 shrink-0 text-white/50" />
                 <input
+                  ref={barcodeInputRef}
+                  aria-label="Barcode"
                   value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value.toUpperCase())}
+                  onChange={(e) => setBarcodeInput(normalizeBarcodeInput(e.target.value))}
                   placeholder="Or type barcode…"
                   className="w-full bg-transparent text-lg font-extrabold tracking-widest text-white placeholder:text-white/30 focus:outline-none"
                 />
                 {barcodeInput && (
                   <button
                     onClick={() => setBarcodeInput("")}
+                    aria-label="Clear barcode"
                     className="shrink-0 text-white/50 hover:text-white"
                   >
                     <X className="h-5 w-5" />
@@ -444,8 +532,21 @@ function ScannerPage() {
           {error && barcodeInput.length >= 6 && !isFetching && !scannedVariant && (
             <div className="absolute left-4 right-4 top-4 rounded-2xl border-2 border-red-500/30 bg-red-500/10 px-6 py-4 text-center backdrop-blur">
               <div className="text-2xl">❌</div>
-              <div className="mt-1 text-sm font-bold text-white">Product not found</div>
-              <div className="text-xs text-white/60">No variant with barcode "{barcodeInput}"</div>
+              <div className="mt-1 text-sm font-bold text-white">
+                {isMarkdownCode(barcodeInput) ? "Markdown unavailable" : "Product not found"}
+              </div>
+              <div className="text-xs text-white/60">
+                {isMarkdownCode(barcodeInput)
+                  ? getMarkdownErrorMessage(error)
+                  : `No variant with barcode "${barcodeInput}"`}
+              </div>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="mt-3 rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-white"
+              >
+                Retry Lookup
+              </button>
             </div>
           )}
         </div>
@@ -453,6 +554,29 @@ function ScannerPage() {
 
       {/* Cart sidebar — only show when something was scanned */}
       {count > 0 && <CartPanel />}
+      {scannedVariant?.sellingMode === "WEIGHT" && !scannedMarkdown ? (
+        <WeightEntryDialog
+          open={weightDialogOpen}
+          productName={scannedVariant.variantName}
+          pricePerKg={scannedSellPrice}
+          availableKg={
+            scannedVariant.quantityAvailable === undefined
+              ? undefined
+              : Math.max(0, scannedVariant.quantityAvailable - (cartLine?.qty || 0))
+          }
+          onClose={() => {
+            setWeightDialogOpen(false);
+            setBarcodeInput("");
+            detectedRef.current = false;
+          }}
+          onConfirm={(kilograms, enteredQuantity) => {
+            if (!addScanned(kilograms, enteredQuantity)) return;
+            setWeightDialogOpen(false);
+            toast.success(`Added ${formatWeight(kilograms)} of ${scannedVariant.variantName}`);
+            detectedRef.current = false;
+          }}
+        />
+      ) : null}
     </div>
   );
 }

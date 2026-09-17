@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { printNormalizedReceipt } from "./receipt-print";
+import { printNormalizedReceipt, printReceiptHtml } from "./receipt-print";
 import type { NormalizedReceipt } from "./receipt";
 
 const receipt: NormalizedReceipt = {
@@ -58,13 +58,15 @@ const receipt: NormalizedReceipt = {
   delivery: "Walk-Out",
 };
 
-describe("printNormalizedReceipt", () => {
+describe("receipt printing", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(
+      (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+    );
   });
 
   it("mounts receipt content before printing and cleans up after print", async () => {
@@ -82,6 +84,42 @@ describe("printNormalizedReceipt", () => {
 
     await expect(printNormalizedReceipt(receipt)).resolves.toBe(true);
 
+    expect(document.getElementById("pos-receipt-print-root")).toBeNull();
+    expect(document.getElementById("pos-receipt-print-style")).toBeNull();
+  });
+
+  it("mounts backend HTML before printing and cleans up after print", async () => {
+    vi.spyOn(window, "print").mockImplementation(() => {
+      const root = document.getElementById("pos-receipt-print-root");
+      const backendReceipt = root?.querySelector("[data-backend-receipt-html]");
+      const printStyles = document.getElementById("pos-receipt-print-style")?.textContent;
+
+      expect(backendReceipt?.textContent).toContain("Backend invoice INV-2002");
+      expect(backendReceipt).toHaveClass("receipt-document");
+      expect(backendReceipt?.querySelector("[data-receipt-print-content]")).not.toBeNull();
+      expect(printStyles).toContain("font-family: Arial, Helvetica, sans-serif !important");
+      expect(printStyles).toContain("font-weight: 600 !important");
+      expect(printStyles).toContain("color: #000 !important");
+      expect(printStyles).toContain("border-color: #000 !important");
+      window.dispatchEvent(new Event("afterprint"));
+    });
+
+    await expect(
+      printReceiptHtml(
+        '<html><body class="receipt-document"><main data-receipt-print-content><h1>Backend invoice INV-2002</h1></main></body></html>',
+      ),
+    ).resolves.toBe(true);
+
+    expect(document.getElementById("pos-receipt-print-root")).toBeNull();
+    expect(document.getElementById("pos-receipt-print-style")).toBeNull();
+  });
+
+  it("cleans up and reports failure when printing throws", async () => {
+    vi.spyOn(window, "print").mockImplementation(() => {
+      throw new Error("Printer unavailable");
+    });
+
+    await expect(printReceiptHtml("<main>Receipt</main>")).resolves.toBe(false);
     expect(document.getElementById("pos-receipt-print-root")).toBeNull();
     expect(document.getElementById("pos-receipt-print-style")).toBeNull();
   });

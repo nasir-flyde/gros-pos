@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "sourceRepository": "nasir-flyde/chota-bazaar-pos",
+  "sourceSha": "aea600e0ab4f0626452770b397bf5a144451ed9c",
+  "baselineSha": "3ab9ee401db42687491e2bb719dd3daceed47b68",
+  "destinationBaseSha": "7c00c4f7813260c65f8f0ac356b4ca4037f0ea48"
+}

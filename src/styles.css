@@ -134,7 +134,16 @@
 }
 
 @keyframes scanline {
-  0%   { top: 0%; opacity: 1; }
-  50%  { top: calc(100% - 2px); opacity: 1; }
-  100% { top: 0%; opacity: 1; }
+  0% {
+    top: 0%;
+    opacity: 1;
+  }
+  50% {
+    top: calc(100% - 2px);
+    opacity: 1;
+  }
+  100% {
+    top: 0%;
+    opacity: 1;
+  }
 }

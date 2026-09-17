@@ -14,6 +14,8 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { applyPosConfig, loadPublicPosConfig, usePosConfig } from "../lib/pos-config";
+import { runtimeConfig } from "../lib/runtime-config";
+import { AuthProvider } from "../components/auth-provider";
 
 function NotFoundComponent() {
   return (
@@ -38,7 +40,6 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
@@ -122,8 +123,6 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
-import { AuthProvider } from "../components/auth-provider";
-
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const config = usePosConfig((state) => state.config);
@@ -137,9 +136,31 @@ function RootComponent() {
     applyPosConfig(config, pathname);
   }, [config, pathname]);
 
+  if (!runtimeConfig.isValid) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4 text-center">
+        <div className="max-w-md">
+          <h1 className="text-xl font-semibold text-white">POS configuration incomplete</h1>
+          <p className="mt-2 text-sm text-slate-400">
+            {runtimeConfig.missing.length > 0
+              ? `Required environment variables are missing: ${runtimeConfig.missing.join(", ")}.`
+              : runtimeConfig.errors.join(" ")}
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-5 rounded-lg bg-orange-500 px-5 py-3 text-sm font-bold text-white hover:bg-orange-600"
+          >
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ClerkProvider
-      publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ""}
+      publishableKey={runtimeConfig.clerkPublishableKey}
       afterSignOutUrl="/login"
       appearance={{
         variables: {

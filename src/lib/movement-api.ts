@@ -54,7 +54,11 @@ export const movementApi = {
       dispatch?: Record<string, number>;
       remarks?: string;
     },
-  ) => api.post<unknown, ApiResponse<Record<string, unknown>>>(`/movements/${movementId}/items`, payload),
+  ) =>
+    api.post<unknown, ApiResponse<Record<string, unknown>>>(
+      `/movements/${movementId}/items`,
+      payload,
+    ),
 
   submit: (movementId: string) =>
     api.post<unknown, ApiResponse<StockMovement>>(`/movements/${movementId}/submit`, {}),

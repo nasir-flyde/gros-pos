@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/auth-store";
 import { orderApi, type PosOrder } from "@/lib/order-api";
+import { getErrorMessage } from "@/lib/pos-page-state";
 import { buildCashMetrics } from "@/lib/report-metrics";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -60,8 +61,8 @@ function CashPage() {
     onSuccess: () => {
       toast.success("Counter closed successfully.");
     },
-    onError: (error: { message?: string }) => {
-      toast.error(error?.message ?? "Close counter failed.");
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error, "Close counter failed."));
     },
   });
 
@@ -80,6 +81,21 @@ function CashPage() {
         {cashOrdersQuery.isLoading ? (
           <div className="py-16 text-center text-muted-foreground">
             <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+          </div>
+        ) : cashOrdersQuery.isError ? (
+          <div className="py-16 text-center text-muted-foreground">
+            <div className="font-extrabold text-foreground">Cash orders unavailable</div>
+            <p className="mt-1 text-sm font-semibold">
+              {getErrorMessage(cashOrdersQuery.error, "Cash orders could not be loaded.")}
+            </p>
+            <Button
+              type="button"
+              onClick={() => void cashOrdersQuery.refetch()}
+              className="mt-4 bg-[var(--brand-blue)] text-white"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry Cash Orders
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Loader2, LockKeyhole, LogOut } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { usePosConfig } from "@/lib/pos-config";
+import { useAuthAccess } from "@/lib/auth-access-context";
 
 export const Route = createFileRoute("/change-password")({
   head: () => ({
@@ -19,6 +20,14 @@ export const Route = createFileRoute("/change-password")({
 function PosAccountSettingsPage() {
   const { isSignedIn, signOut } = useAuth();
   const navigate = useNavigate();
+  const { refreshAccess } = useAuthAccess();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const user = useAuthStore((state) => state.user);
   const config = usePosConfig((state) => state.config);
   const [newPassword, setNewPassword] = useState("");
@@ -42,48 +51,23 @@ function PosAccountSettingsPage() {
     setError("");
     try {
       await api.post("/auth/setup-password", { newPassword });
-      const refreshed = (await api.get("/auth/me")) as {
-        data?: {
-          user?: {
-            _id?: string;
-            id?: string;
-            firstName?: string;
-            lastName?: string;
-            email?: string;
-            phone?: string;
-            isSuperAdmin?: boolean | number;
-            organizationId?: string | null;
-            mustChangePassword?: boolean;
-          };
-          permissions?: string[];
-          scopes?: Array<{ type: "store" | "warehouse" | "city"; id: string; name: string }>;
-          clerkOrganizationId?: string | null;
-        };
-      };
-      const nextUser = refreshed?.data?.user;
-      if (nextUser) {
-        useAuthStore.getState().setGrosAccess({
-          user: {
-            id: nextUser._id ?? nextUser.id ?? "",
-            firstName: nextUser.firstName ?? "",
-            lastName: nextUser.lastName ?? "",
-            email: nextUser.email ?? "",
-            phone: nextUser.phone ?? "",
-            isSuperAdmin: Boolean(nextUser.isSuperAdmin),
-            organizationId: nextUser.organizationId ?? null,
-            mustChangePassword: Boolean(nextUser.mustChangePassword),
-          },
-          permissions: refreshed?.data?.permissions ?? [],
-          scopes: refreshed?.data?.scopes ?? [],
-          clerkOrganizationId: refreshed?.data?.clerkOrganizationId ?? null,
-        });
+      if (!mounted.current) return;
+      await refreshAccess();
+      const access = useAuthStore.getState();
+      if (
+        mounted.current &&
+        access.status === "ready" &&
+        access.user &&
+        !access.user.mustChangePassword
+      ) {
+        navigate({ to: "/", replace: true });
       }
-      navigate({ to: "/", replace: true });
     } catch (err) {
       const serverErr = err as { message?: string };
-      setError(serverErr?.message || "We could not save your password. Please try again.");
+      if (mounted.current)
+        setError(serverErr?.message || "We could not save your password. Please try again.");
     } finally {
-      setSaving(false);
+      if (mounted.current) setSaving(false);
     }
   };
 
@@ -130,8 +114,7 @@ function PosAccountSettingsPage() {
             <div>
               <div className="text-sm font-semibold text-white">One-time password setup</div>
               <p className="mt-1 text-xs leading-5 text-slate-400">
-                Use 8+ characters with one uppercase letter, one number, and one special
-                character.
+                Use 8+ characters with one uppercase letter, one number, and one special character.
               </p>
             </div>
           </div>

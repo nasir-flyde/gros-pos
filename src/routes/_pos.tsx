@@ -1,7 +1,26 @@
 import { createFileRoute, Outlet, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { CartProvider } from "@/lib/cart-context";
-import { Home, ShoppingCart, Users, ScanLine, Store, Clock } from "lucide-react";
+import { BrandIcon } from "@/components/brand-icon";
+import { StoreScopeGate } from "@/components/store-scope-gate";
+import {
+  Bike,
+  Clock,
+  Home,
+  Printer,
+  ReceiptText,
+  ScanLine,
+  ShoppingCart,
+  Users,
+  LogOut,
+} from "lucide-react";
 import { useEffect, useState } from "react";
+import { canViewShelfLabels } from "@/lib/shelf-label-access";
+import { useLiveCatalog } from "@/lib/use-live-catalog";
+import { useAuthStore } from "@/lib/auth-store";
+import { clearCatalogCache } from "@/lib/catalog-cache";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@clerk/react";
+import { usePosConfig } from "@/lib/pos-config";
 
 export const Route = createFileRoute("/_pos")({
   component: PosLayout,
@@ -12,28 +31,46 @@ const NAV = [
   { to: "/new-order", label: "New Order", icon: ShoppingCart },
   { to: "/scanner", label: "Scan", icon: ScanLine },
   { to: "/customers", label: "Customers", icon: Users },
+  { to: "/orders", label: "Orders", icon: ReceiptText },
+  { to: "/delivery", label: "Delivery", icon: Bike },
+  { to: "/shelf-labels", label: "SEL Printing", icon: Printer, shelfLabelOnly: true },
 ] as const;
 
 function PosLayout() {
+  const user = useAuthStore((state) => state.user);
+  const storeId = useAuthStore((state) => state.scopes.find((scope) => scope.type === "store")?.id);
+  const scopeKey = JSON.stringify([user?.organizationId, user?.id, storeId]);
   return (
-    <CartProvider>
-      <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
-        <TopHeader />
-        <div className="flex flex-1 overflow-hidden">
-          <SideNav />
-          <main className="flex-1 overflow-hidden">
-            <Outlet />
-          </main>
-        </div>
-      </div>
-    </CartProvider>
+    <StoreScopeGate>
+      <ScopedTerminal key={scopeKey} scopeKey={scopeKey}>
+        <CartProvider scopeKey={scopeKey}>
+          <CatalogPrefetch />
+          <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
+            <TopHeader />
+            <div className="flex flex-1 overflow-hidden">
+              <SideNav />
+              <main className="flex-1 overflow-hidden">
+                <Outlet />
+              </main>
+            </div>
+          </div>
+        </CartProvider>
+      </ScopedTerminal>
+    </StoreScopeGate>
   );
 }
 
-import { useAuth } from "@clerk/react";
-import { useAuthStore } from "../lib/auth-store";
-import { usePosConfig } from "../lib/pos-config";
-import { LogOut } from "lucide-react";
+function ScopedTerminal({ children }: { children: React.ReactNode; scopeKey: string }) {
+  const [client] = useState(() => new QueryClient());
+  useEffect(() => () => client.clear(), [client]);
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function CatalogPrefetch() {
+  const storeId = useAuthStore((state) => state.scopes.find((scope) => scope.type === "store")?.id);
+  useLiveCatalog("pos-prefetch", storeId);
+  return null;
+}
 
 function TopHeader() {
   const [now, setNow] = useState(() => new Date());
@@ -41,6 +78,7 @@ function TopHeader() {
   const config = usePosConfig((state) => state.config);
   const { signOut } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -58,8 +96,11 @@ function TopHeader() {
     month: "short",
   });
 
-  const handleLogout = () => {
-    signOut();
+  const handleLogout = async () => {
+    const organizationId = user?.organizationId || undefined;
+    queryClient.clear();
+    await clearCatalogCache(organizationId);
+    await signOut();
     navigate({ to: "/login", replace: true });
   };
 
@@ -86,9 +127,7 @@ function TopHeader() {
               className="h-12 w-12 shrink-0 rounded-xl bg-white/10 object-contain p-1.5"
             />
           ) : (
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/15 text-white">
-              <Store className="h-6 w-6" strokeWidth={2.5} />
-            </div>
+            <BrandIcon className="h-12 w-12 shrink-0 rounded-xl" />
           )}
           <div className="min-w-0">
             <div className="truncate text-lg font-extrabold leading-tight tracking-tight">
@@ -123,7 +162,7 @@ function TopHeader() {
         <button
           onClick={handleLogout}
           title="Sign Out"
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-red-600/20 text-white hover:bg-red-600/40 transition-colors cursor-pointer"
+          className="grid h-12 w-12 shrink-0 cursor-pointer place-items-center rounded-full bg-red-600/20 text-white transition-colors hover:bg-red-600/40"
         >
           <LogOut className="h-5 w-5" />
         </button>
@@ -132,11 +171,16 @@ function TopHeader() {
   );
 }
 
-function SideNav() {
+export function SideNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const permissions = useAuthStore((state) => state.permissions);
+  const isSuperAdmin = useAuthStore((state) => Boolean(state.user?.isSuperAdmin));
+  const visibleNav = NAV.filter(
+    (item) => !("shelfLabelOnly" in item) || canViewShelfLabels(permissions, isSuperAdmin),
+  );
   return (
     <nav className="flex w-[88px] shrink-0 flex-col gap-1.5 overflow-y-auto bg-[var(--surface)] py-3 shadow-[2px_0_0_var(--color-border)]">
-      {NAV.map((n) => {
+      {visibleNav.map((n) => {
         const active = pathname === n.to || (n.to !== "/" && pathname.startsWith(n.to));
         const Icon = n.icon;
         return (
@@ -155,7 +199,7 @@ function SideNav() {
           </Link>
         );
       })}
-      <div className="mt-auto mx-1.5 flex items-center justify-center gap-1 rounded-xl bg-[var(--secondary)] py-2 text-[10px] font-semibold text-muted-foreground">
+      <div className="mx-1.5 mt-auto flex items-center justify-center gap-1 rounded-xl bg-[var(--secondary)] py-2 text-[10px] font-semibold text-muted-foreground">
         <Clock className="h-3.5 w-3.5" /> v2.4
       </div>
     </nav>

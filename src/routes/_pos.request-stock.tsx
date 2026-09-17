@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/auth-store";
 import { movementApi } from "@/lib/movement-api";
+import { getErrorMessage } from "@/lib/pos-page-state";
 import { storeOpsApi, type ReplenishmentSuggestion } from "@/lib/store-ops-api";
 import { warehouseApi, type PosWarehouse } from "@/lib/warehouse-api";
 
@@ -30,12 +31,18 @@ function RequestStockPage() {
     queryFn: () => warehouseApi.list({ limit: 100 }),
   });
 
-  const suggestions = (suggestionsQuery.data?.data ?? []) as ReplenishmentSuggestion[];
+  const suggestions = useMemo(
+    () => (suggestionsQuery.data?.data ?? []) as ReplenishmentSuggestion[],
+    [suggestionsQuery.data?.data],
+  );
   const warehouses = (warehousesQuery.data?.data ?? []) as PosWarehouse[];
   const selectedEntries = useMemo(
     () =>
       suggestions
-        .filter((suggestion) => (selected[suggestion.productVariantId] ?? suggestion.suggestedQuantity) > 0)
+        .filter(
+          (suggestion) =>
+            (selected[suggestion.productVariantId] ?? suggestion.suggestedQuantity) > 0,
+        )
         .map((suggestion) => ({
           ...suggestion,
           quantity: selected[suggestion.productVariantId] ?? suggestion.suggestedQuantity,
@@ -76,11 +83,7 @@ function RequestStockPage() {
       setSelected({});
     },
     onError: (error: unknown) => {
-      const message =
-        typeof error === "object" && error && "message" in error
-          ? String(error.message)
-          : "Failed to submit stock request";
-      toast.error(message);
+      toast.error(getErrorMessage(error, "Failed to submit stock request"));
     },
   });
 
@@ -104,6 +107,7 @@ function RequestStockPage() {
             <select
               value={sourceWarehouseId}
               onChange={(event) => setSourceWarehouseId(event.target.value)}
+              disabled={warehousesQuery.isLoading || warehousesQuery.isError}
               className="mt-1 w-full bg-transparent font-semibold focus:outline-none"
             >
               <option value="">Select warehouse</option>
@@ -116,16 +120,49 @@ function RequestStockPage() {
           </label>
           <button
             onClick={() => requestMutation.mutate()}
-            disabled={!sourceWarehouseId || selectedEntries.length === 0 || requestMutation.isPending}
+            disabled={
+              !sourceWarehouseId ||
+              selectedEntries.length === 0 ||
+              suggestionsQuery.isError ||
+              warehousesQuery.isError ||
+              requestMutation.isPending
+            }
             className="rounded-xl bg-[var(--brand-blue)] px-5 py-3 text-sm font-extrabold text-white disabled:opacity-50"
           >
             {requestMutation.isPending ? "Submitting..." : "Submit Request"}
           </button>
         </div>
 
+        {warehousesQuery.isError ? (
+          <div className="mb-4 rounded-xl border border-[var(--brand-red)]/30 bg-[var(--brand-red)]/5 p-3 text-sm font-semibold text-[var(--brand-red)]">
+            {getErrorMessage(warehousesQuery.error, "Warehouses could not be loaded.")}
+            <button
+              type="button"
+              onClick={() => void warehousesQuery.refetch()}
+              className="ml-3 underline"
+            >
+              Retry Warehouses
+            </button>
+          </div>
+        ) : null}
+
         {suggestionsQuery.isLoading ? (
           <div className="py-8 text-center text-muted-foreground">
             <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+          </div>
+        ) : suggestionsQuery.isError ? (
+          <div className="rounded-xl border border-[var(--brand-red)]/30 bg-[var(--brand-red)]/5 p-4 text-sm font-semibold text-[var(--brand-red)]">
+            {getErrorMessage(
+              suggestionsQuery.error,
+              "Replenishment suggestions could not be loaded.",
+            )}
+            <button
+              type="button"
+              onClick={() => void suggestionsQuery.refetch()}
+              className="ml-3 underline"
+            >
+              Retry Suggestions
+            </button>
           </div>
         ) : suggestions.length === 0 ? (
           <div className="rounded-xl bg-[var(--secondary)] p-4 text-sm font-semibold text-muted-foreground">
@@ -159,7 +196,9 @@ function RequestStockPage() {
                       <input
                         type="number"
                         min={0}
-                        value={selected[suggestion.productVariantId] ?? suggestion.suggestedQuantity}
+                        value={
+                          selected[suggestion.productVariantId] ?? suggestion.suggestedQuantity
+                        }
                         onChange={(event) =>
                           setSelected((current) => ({
                             ...current,

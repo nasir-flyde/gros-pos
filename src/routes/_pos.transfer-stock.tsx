@@ -4,7 +4,14 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/auth-store";
-import { productApi, type PosJoinedVariant } from "@/lib/product-api";
+import {
+  buildSelectedTransferItems,
+  buildTransferPayloadItems,
+  clampTransferQuantity,
+} from "@/lib/operations-flow";
+import { getErrorMessage } from "@/lib/pos-page-state";
+import { type PosJoinedVariant } from "@/lib/product-api";
+import { useLiveCatalog } from "@/lib/use-live-catalog";
 import { movementApi, type StockMovement } from "@/lib/movement-api";
 import { storesApi, type PosStore } from "@/lib/store-api";
 import { storeOpsApi } from "@/lib/store-ops-api";
@@ -22,11 +29,7 @@ function TransferStockPage() {
   const [destinationId, setDestinationId] = useState("");
   const [selected, setSelected] = useState<Record<string, number>>({});
 
-  const catalogQuery = useQuery({
-    queryKey: ["transfer-catalog", sourceStoreId],
-    queryFn: () => productApi.getJoinedCatalog({ storeId: sourceStoreId }),
-    enabled: !!sourceStoreId,
-  });
+  const catalogQuery = useLiveCatalog("transfer-catalog", sourceStoreId);
 
   const storesQuery = useQuery({
     queryKey: ["transfer-stores"],
@@ -50,35 +53,26 @@ function TransferStockPage() {
         sourceType: "STORE",
         sourceId: sourceStoreId,
         destinationId,
-        items: Object.entries(selected).map(([productVariantId, quantity]) => ({
-          productVariantId,
-          quantity,
-        })),
+        items: buildTransferPayloadItems(catalogQuery.data?.variants ?? [], selected),
         remarks: "POS transfer stock",
       }),
     onSuccess: () => {
       toast.success("Transfer submitted");
       setSelected({});
     },
-    onError: (error: any) => {
-      toast.error(error?.message || "Failed to submit transfer");
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error, "Failed to submit transfer"));
     },
   });
 
   const sourceScope = scopes.find((scope) => scope.type === "store");
-  const variants = catalogQuery.data?.variants ?? [];
+  const variants = useMemo(() => catalogQuery.data?.variants ?? [], [catalogQuery.data?.variants]);
   const destinations = ((storesQuery.data?.data ?? []) as PosStore[]).filter(
     (store) => store._id !== sourceStoreId,
   );
 
   const selectedItems = useMemo(
-    () =>
-      variants
-        .filter((variant) => selected[variant._id] > 0)
-        .map((variant) => ({
-          ...variant,
-          quantity: selected[variant._id],
-        })),
+    () => buildSelectedTransferItems(variants, selected),
     [selected, variants],
   );
 
@@ -112,6 +106,7 @@ function TransferStockPage() {
                 <select
                   value={destinationId}
                   onChange={(event) => setDestinationId(event.target.value)}
+                  disabled={storesQuery.isLoading || storesQuery.isError}
                   className="mt-2 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm font-semibold"
                 >
                   <option value="">Select destination</option>
@@ -141,6 +136,22 @@ function TransferStockPage() {
                         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                       </td>
                     </tr>
+                  ) : catalogQuery.isError ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                        <div className="font-extrabold text-foreground">Catalog unavailable</div>
+                        <p className="mt-1 text-sm font-semibold">
+                          {getErrorMessage(catalogQuery.error, "Transfer catalog could not load.")}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void catalogQuery.refetch()}
+                          className="mt-4 rounded-xl bg-[var(--brand-blue)] px-4 py-2 text-xs font-extrabold text-white"
+                        >
+                          Retry Catalog
+                        </button>
+                      </td>
+                    </tr>
                   ) : variants.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
@@ -160,12 +171,13 @@ function TransferStockPage() {
                             onClick={() =>
                               setSelected((current) => ({
                                 ...current,
-                                [variant._id]: Math.min(
-                                  (variant.quantityAvailable ?? 0),
+                                [variant._id]: clampTransferQuantity(
                                   (current[variant._id] ?? 0) + 1,
+                                  variant.quantityAvailable,
                                 ),
                               }))
                             }
+                            disabled={(variant.quantityAvailable ?? 0) <= 0}
                             className="inline-flex items-center gap-1 rounded-lg bg-[var(--brand-blue)] px-3 py-2 text-xs font-extrabold text-white"
                           >
                             <Plus className="h-4 w-4" />
@@ -224,12 +236,9 @@ function TransferStockPage() {
                         onChange={(event) =>
                           setSelected((current) => ({
                             ...current,
-                            [item._id]: Math.max(
-                              1,
-                              Math.min(
-                                item.quantityAvailable ?? Number(event.target.value || 1),
-                                Number(event.target.value || 1),
-                              ),
+                            [item._id]: clampTransferQuantity(
+                              Number(event.target.value || 0),
+                              item.quantityAvailable,
                             ),
                           }))
                         }
@@ -244,7 +253,13 @@ function TransferStockPage() {
 
             <button
               onClick={() => transferMutation.mutate()}
-              disabled={!destinationId || selectedItems.length === 0 || transferMutation.isPending}
+              disabled={
+                !destinationId ||
+                selectedItems.length === 0 ||
+                storesQuery.isError ||
+                catalogQuery.isError ||
+                transferMutation.isPending
+              }
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-blue)] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-50"
             >
               {transferMutation.isPending ? (
@@ -260,7 +275,29 @@ function TransferStockPage() {
                 Recent Transfers
               </div>
               <div className="mt-2 space-y-2">
-                {history.length === 0 ? (
+                {storesQuery.isError ? (
+                  <div className="rounded-lg bg-white p-3 text-sm font-semibold text-[var(--brand-red)]">
+                    {getErrorMessage(storesQuery.error, "Destination stores could not be loaded.")}
+                    <button
+                      type="button"
+                      onClick={() => void storesQuery.refetch()}
+                      className="ml-2 underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : historyQuery.isError ? (
+                  <div className="rounded-lg bg-white p-3 text-sm font-semibold text-[var(--brand-red)]">
+                    {getErrorMessage(historyQuery.error, "Transfer history could not be loaded.")}
+                    <button
+                      type="button"
+                      onClick={() => void historyQuery.refetch()}
+                      className="ml-2 underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : history.length === 0 ? (
                   <div className="rounded-lg bg-white p-3 text-sm font-semibold text-muted-foreground">
                     No recent store-to-store transfers from this store.
                   </div>

@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, ShoppingCart } from "lucide-react";
 import { useAuthStore } from "@/lib/auth-store";
-import { productApi, type PosJoinedVariant } from "@/lib/product-api";
+import { getVariantStockStatus, type PosJoinedVariant } from "@/lib/product-api";
+import { useLiveCatalog } from "@/lib/use-live-catalog";
 
 export const Route = createFileRoute("/_pos/purchase-request")({
   head: () => ({ meta: [{ title: "Purchase Request" }] }),
@@ -14,16 +14,12 @@ function PurchaseRequestPage() {
   const { scopes } = useAuthStore();
   const storeId = scopes.find((scope) => scope.type === "store")?.id ?? "";
 
-  const catalogQuery = useQuery({
-    queryKey: ["purchase-request-catalog", storeId],
-    queryFn: () => productApi.getJoinedCatalog({ storeId }),
-    enabled: !!storeId,
-  });
+  const catalogQuery = useLiveCatalog("purchase-request-catalog", storeId);
 
   const lowStock = useMemo(
     () =>
       (catalogQuery.data?.variants ?? [])
-        .filter((variant) => (variant.quantityAvailable ?? 0) <= 10)
+        .filter((variant) => getVariantStockStatus(variant) !== "HEALTHY")
         .slice(0, 25),
     [catalogQuery.data?.variants],
   );

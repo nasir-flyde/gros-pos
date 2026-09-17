@@ -1,5 +1,7 @@
 node_modules
 dist
+coverage
+.vercel
 .output
 .vinxi
 pnpm-lock.yaml

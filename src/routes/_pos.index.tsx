@@ -2,10 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { orderApi, type PosOrder } from "@/lib/order-api";
-import { productApi } from "@/lib/product-api";
+import { useLiveCatalog } from "@/lib/use-live-catalog";
 import { useAuthStore } from "@/lib/auth-store";
 import { formatINR } from "@/lib/utils";
 import { fetchAndPrintOrderReceipt } from "@/lib/order-receipt";
+import { getErrorMessage } from "@/lib/pos-page-state";
 import {
   buildAverageBasket,
   buildInventoryAlertCounts,
@@ -49,7 +50,7 @@ const QUICK_ACTIONS = [
   { to: "/customers", label: "Customers", icon: UserSearch, color: "var(--brand-orange)" },
   { to: "/hold", label: "Held Orders", icon: RotateCcw, color: "var(--brand-blue)" },
   { to: "/delivery", label: "Delivery", icon: Bike, color: "var(--brand-orange)" },
-  { to: "/returns", label: "Returns", icon: Wallet, color: "var(--brand-red)" },
+  { to: "/orders", label: "Orders", icon: Wallet, color: "var(--brand-red)" },
 ];
 
 function HomePage() {
@@ -59,17 +60,20 @@ function HomePage() {
   const storeName = scopes.find((s) => s.type === "store")?.name ?? "Store";
   const cashierName = user ? `${user.firstName} ${user.lastName}` : "Cashier";
   const businessDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const dateFrom = useMemo(() => new Date(`${businessDate}T00:00:00`).toISOString(), [businessDate]);
+  const dateFrom = useMemo(
+    () => new Date(`${businessDate}T00:00:00`).toISOString(),
+    [businessDate],
+  );
   const dateTo = useMemo(() => new Date(`${businessDate}T23:59:59`).toISOString(), [businessDate]);
 
-  const { data: summaryRes } = useQuery({
+  const summaryQuery = useQuery({
     queryKey: ["order-summary", storeId, dateFrom, dateTo],
     queryFn: () => orderApi.getSummary({ storeId, dateFrom, dateTo }),
     enabled: !!storeId,
     staleTime: 15_000,
   });
 
-  const { data: recentRes, isLoading } = useQuery({
+  const recentOrdersQuery = useQuery({
     queryKey: ["recent-orders", storeId, dateFrom, dateTo],
     queryFn: () =>
       orderApi.list({
@@ -82,7 +86,7 @@ function HomePage() {
     staleTime: 15_000,
   });
 
-  const { data: queueRes } = useQuery({
+  const queueQuery = useQuery({
     queryKey: ["homepage-fulfillment-queue", storeId],
     queryFn: () =>
       orderApi.list({
@@ -93,27 +97,34 @@ function HomePage() {
     staleTime: 15_000,
   });
 
-  const { data: inventoryData } = useQuery({
-    queryKey: ["homepage-inventory-alerts", storeId],
-    queryFn: () => productApi.getJoinedCatalog({ storeId }),
-    enabled: !!storeId,
-    staleTime: 30_000,
-  });
+  const inventoryQuery = useLiveCatalog("homepage-inventory-alerts", storeId);
 
   const recentOrders = useMemo(
-    () => ((recentRes?.data ?? []) as PosOrder[]).filter((order) => order.orderType === "POS"),
-    [recentRes?.data],
+    () =>
+      ((recentOrdersQuery.data?.data ?? []) as PosOrder[]).filter(
+        (order) => order.orderType === "POS",
+      ),
+    [recentOrdersQuery.data?.data],
   );
   const displayedRecentOrders = recentOrders.slice(0, 20);
-  const queueOrders = useMemo(() => (queueRes?.data ?? []) as PosOrder[], [queueRes?.data]);
-  const inventoryVariants = inventoryData?.variants ?? [];
-  const summary = summaryRes?.data;
+  const queueOrders = useMemo(
+    () => (queueQuery.data?.data ?? []) as PosOrder[],
+    [queueQuery.data?.data],
+  );
+  const inventoryVariants = useMemo(
+    () => inventoryQuery.data?.variants ?? [],
+    [inventoryQuery.data?.variants],
+  );
+  const summary = summaryQuery.data?.data;
   const todaySales = summary?.revenue ?? 0;
   const completedToday = summary?.completedOrders ?? 0;
   const paymentTotals = useMemo(() => buildPaymentTotals(recentOrders), [recentOrders]);
   const avgBasket = buildAverageBasket(summary?.averageOrderValue, todaySales, completedToday);
   const pendingCounts = useMemo(() => buildPendingFulfillmentCounts(queueOrders), [queueOrders]);
-  const inventoryAlerts = useMemo(() => buildInventoryAlertCounts(inventoryVariants), [inventoryVariants]);
+  const inventoryAlerts = useMemo(
+    () => buildInventoryAlertCounts(inventoryVariants),
+    [inventoryVariants],
+  );
   const kpis = [
     {
       label: "Today's Sales",
@@ -197,6 +208,40 @@ function HomePage() {
         {storeName} · {cashierName}
       </p>
 
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <HomeQueryNotice
+          label="Sales summary"
+          isError={summaryQuery.isError}
+          error={summaryQuery.error}
+          isRefreshing={summaryQuery.isFetching && Boolean(summaryQuery.data)}
+          onRetry={() => void summaryQuery.refetch()}
+        />
+        <HomeQueryNotice
+          label="Inventory alerts"
+          isError={inventoryQuery.isError || Boolean(inventoryQuery.snapshotError)}
+          error={inventoryQuery.isError ? inventoryQuery.error : inventoryQuery.snapshotError}
+          isRefreshing={
+            (inventoryQuery.isFetching || inventoryQuery.isInventoryRefreshing) &&
+            Boolean(inventoryQuery.data)
+          }
+          onRetry={() => void inventoryQuery.refetch()}
+        />
+        <HomeQueryNotice
+          label="Fulfillment queue"
+          isError={queueQuery.isError}
+          error={queueQuery.error}
+          isRefreshing={queueQuery.isFetching && Boolean(queueQuery.data)}
+          onRetry={() => void queueQuery.refetch()}
+        />
+        <HomeQueryNotice
+          label="Recent orders"
+          isError={recentOrdersQuery.isError}
+          error={recentOrdersQuery.error}
+          isRefreshing={recentOrdersQuery.isFetching && Boolean(recentOrdersQuery.data)}
+          onRetry={() => void recentOrdersQuery.refetch()}
+        />
+      </div>
+
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         {kpis.map((kpi) => (
           <KPI
@@ -227,7 +272,9 @@ function HomePage() {
       <div className="mt-6 rounded-2xl border-2 bg-card overflow-hidden">
         <div className="flex items-center justify-between border-b bg-[var(--secondary)] px-5 py-3">
           <h2 className="text-sm font-bold uppercase tracking-wide">Recent Orders</h2>
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {recentOrdersQuery.isLoading && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -246,7 +293,11 @@ function HomePage() {
               {displayedRecentOrders.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
-                    {isLoading ? "Loading…" : "No orders yet today."}
+                    {recentOrdersQuery.isLoading
+                      ? "Loading..."
+                      : recentOrdersQuery.isError
+                        ? "Recent orders could not be loaded."
+                        : "No orders yet today."}
                   </td>
                 </tr>
               ) : (
@@ -302,6 +353,45 @@ function HomePage() {
   );
 }
 
+function HomeQueryNotice({
+  label,
+  isError,
+  error,
+  isRefreshing,
+  onRetry,
+}: {
+  label: string;
+  isError: boolean;
+  error: unknown;
+  isRefreshing: boolean;
+  onRetry: () => void;
+}) {
+  if (!isError && !isRefreshing) return null;
+
+  return (
+    <div
+      className={
+        "flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-xs font-bold " +
+        (isError
+          ? "border-[var(--brand-red)]/30 bg-[var(--brand-red)]/5 text-[var(--brand-red)]"
+          : "bg-[var(--secondary)] text-muted-foreground")
+      }
+    >
+      <span>
+        {label}:{" "}
+        {isError
+          ? getErrorMessage(error, "Unable to refresh this section.")
+          : "Refreshing live data..."}
+      </span>
+      {isError ? (
+        <button type="button" onClick={onRetry} className="shrink-0 underline">
+          Retry
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function KPI({
   label,
   value,
@@ -318,7 +408,10 @@ function KPI({
   return (
     <div className="rounded-2xl border-2 bg-card p-4 shadow-sm">
       <div className="flex items-center gap-2">
-        <div className="grid h-9 w-9 place-items-center rounded-lg" style={{ backgroundColor: color + "20" }}>
+        <div
+          className="grid h-9 w-9 place-items-center rounded-lg"
+          style={{ backgroundColor: color + "20" }}
+        >
           <Icon className="h-5 w-5" style={{ color }} strokeWidth={2.5} />
         </div>
         <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -326,7 +419,9 @@ function KPI({
         </span>
       </div>
       <div className="mt-2 text-2xl font-extrabold tabular-nums">{value}</div>
-      {subtitle ? <div className="mt-1 text-sm font-semibold text-muted-foreground">{subtitle}</div> : null}
+      {subtitle ? (
+        <div className="mt-1 text-sm font-semibold text-muted-foreground">{subtitle}</div>
+      ) : null}
     </div>
   );
 }

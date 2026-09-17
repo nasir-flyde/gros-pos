@@ -1,20 +1,19 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildReceiptFallbackFromOrder,
-  isReceiptPrintable,
-  normalizeReceiptData,
-} from "./receipt";
+import { buildReceiptFallbackFromOrder, isReceiptPrintable, normalizeReceiptData } from "./receipt";
 import type { PosOrder } from "./order-api";
 
 describe("normalizeReceiptData", () => {
   it("builds a safe fallback receipt when only checkout basics are available", () => {
-    const receipt = normalizeReceiptData({}, {
-      orderId: "ORD-1001",
-      total: 255,
-      payment: "Split",
-      delivery: "Walk-Out",
-      customer: { _id: "customer-1", name: "Asha", mobile: "9999999999", area: "Central" },
-    });
+    const receipt = normalizeReceiptData(
+      {},
+      {
+        orderId: "ORD-1001",
+        total: 255,
+        payment: "Split",
+        delivery: "Walk-Out",
+        customer: { _id: "customer-1", name: "Asha", mobile: "9999999999", area: "Central" },
+      },
+    );
 
     expect(receipt).toMatchObject({
       orderId: "ORD-1001",

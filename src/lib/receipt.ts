@@ -6,6 +6,9 @@ export interface ReceiptLineItem {
   variantName: string;
   sku: string;
   quantity: number;
+  sellingMode?: "FIXED" | "WEIGHT";
+  quantityUnit?: "PCS" | "KG";
+  unitLabel?: string;
   unitPrice: number;
   taxRate: number;
   discountAmount: number;
@@ -13,6 +16,10 @@ export interface ReceiptLineItem {
   cgst: number;
   sgst: number;
   hsnCode: string;
+  markdownCode?: string;
+  batchNumber?: string;
+  basePrice?: number;
+  markdownUnitPrice?: number;
 }
 
 export interface NormalizedReceipt {
@@ -66,7 +73,9 @@ export type ReceiptFallback = {
 };
 
 const asObject = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const asString = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);
@@ -113,7 +122,8 @@ export function normalizeReceiptData(
   const storeInfo = asObject(nested.storeInfo) ?? asObject(root.storeInfo) ?? {};
   const storeAddress = asObject(storeInfo.address) ?? {};
   const orgInfo = asObject(nested.organizationInfo) ?? {};
-  const payments = asArray(nested.payments).length > 0 ? asArray(nested.payments) : asArray(root.payments);
+  const payments =
+    asArray(nested.payments).length > 0 ? asArray(nested.payments) : asArray(root.payments);
   const rawItems = asArray(nested.items).length > 0 ? asArray(nested.items) : asArray(root.items);
 
   const subtotal = asNumber(nested.subtotal, asNumber(root.subtotal, 0));
@@ -129,8 +139,10 @@ export function normalizeReceiptData(
   const orderNumber = asString(nested.orderNumber, asString(root.orderNumber, fallback.orderId));
   const invoiceNumber = asString(root.receiptNumber, orderNumber);
   const cashierName = asString(nested.cashierName, asString(root.cashierName, ""));
-  const customerName =
-    asString(nested.customerName, asString(root.customerName, fallback.customer?.name ?? ""));
+  const customerName = asString(
+    nested.customerName,
+    asString(root.customerName, fallback.customer?.name ?? ""),
+  );
   const paymentMode = asString(nested.paymentMode, asString(root.paymentMode, fallback.payment));
   const storeName = asString(storeInfo.storeName, "Store");
   const storePhone = asString(storeInfo.phone, "");
@@ -154,9 +166,10 @@ export function normalizeReceiptData(
     const rate = asNumber(item.taxRate, 0);
     const lineTotal = asNumber(item.lineTotal, 0);
     const halfRate = rate / 2;
-    const taxable = rate > 0 ? Math.round(((lineTotal * 100) / (100 + rate)) * 100) / 100 : lineTotal;
-    const cgst = Math.round((taxable * halfRate) / 100 * 100) / 100;
-    const sgst = Math.round((taxable * halfRate) / 100 * 100) / 100;
+    const taxable =
+      rate > 0 ? Math.round(((lineTotal * 100) / (100 + rate)) * 100) / 100 : lineTotal;
+    const cgst = Math.round(((taxable * halfRate) / 100) * 100) / 100;
+    const sgst = Math.round(((taxable * halfRate) / 100) * 100) / 100;
     const sku = asString(item.sku, "");
     const hsnCode = sku.split("-")[0] || "";
 
@@ -172,6 +185,9 @@ export function normalizeReceiptData(
       variantName: asString(item.variantName, `Item ${index + 1}`),
       sku,
       quantity: asNumber(item.quantity, 0),
+      sellingMode: item.sellingMode === "WEIGHT" ? "WEIGHT" : "FIXED",
+      quantityUnit: item.quantityUnit === "KG" ? "KG" : "PCS",
+      unitLabel: asString(item.unitLabel, item.quantityUnit === "KG" ? "/KG" : ""),
       unitPrice: asNumber(item.unitPrice, 0),
       taxRate: rate,
       discountAmount: asNumber(item.discountAmount, 0),
@@ -179,6 +195,11 @@ export function normalizeReceiptData(
       cgst,
       sgst,
       hsnCode,
+      markdownCode: asString(item.markdownCode, undefined),
+      batchNumber: asString(item.batchNumber, undefined),
+      basePrice: typeof item.basePrice === "number" ? item.basePrice : undefined,
+      markdownUnitPrice:
+        typeof item.markdownUnitPrice === "number" ? item.markdownUnitPrice : undefined,
     };
   });
 

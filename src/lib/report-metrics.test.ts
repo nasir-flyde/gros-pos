@@ -63,8 +63,12 @@ describe("report metrics", () => {
 
   it("builds chartable datasets", () => {
     expect(buildHourlySales(baseOrders).find((point) => point.hour === "08")?.sales).toBe(100);
-    expect(buildPaymentBreakdown(baseOrders).find((point) => point.name === "CARD")?.value).toBe(200);
-    expect(buildStatusBreakdown(baseOrders).find((point) => point.name === "REFUNDED")?.value).toBe(1);
+    expect(buildPaymentBreakdown(baseOrders).find((point) => point.name === "CARD")?.value).toBe(
+      200,
+    );
+    expect(buildStatusBreakdown(baseOrders).find((point) => point.name === "REFUNDED")?.value).toBe(
+      1,
+    );
   });
 
   it("separates cash and online payment totals", () => {
@@ -150,6 +154,34 @@ describe("report metrics", () => {
       criticalCount: 1,
       lowCount: 1,
       totalAlerts: 2,
+    });
+  });
+
+  it("uses configured reorder status for inventory alerts", () => {
+    const variant: PosJoinedVariant = {
+      _id: "configured",
+      variantName: "Configured",
+      productName: "Configured",
+      categoryName: "Cat",
+      categoryId: "cat",
+      sku: "CONFIGURED",
+      sellingMode: "FIXED",
+      unitValue: "1",
+      unitType: "pc",
+      mrp: 10,
+      price: 10,
+      barcode: "4",
+      barcodes: ["4"],
+      taxRate: 0,
+      quantityAvailable: 30,
+      reorderThreshold: 40,
+      stockStatus: "LOW",
+    };
+
+    expect(buildInventoryAlertCounts([variant])).toEqual({
+      criticalCount: 0,
+      lowCount: 1,
+      totalAlerts: 1,
     });
   });
 

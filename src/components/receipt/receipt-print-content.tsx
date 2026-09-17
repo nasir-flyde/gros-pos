@@ -1,6 +1,7 @@
 import { formatINR } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { NormalizedReceipt } from "@/lib/receipt";
+import { formatWeight } from "@/lib/weight";
 
 export function ReceiptPrintContent({
   receipt,
@@ -30,8 +31,12 @@ export function ReceiptPrintContent({
         className,
       )}
     >
-      <div className="text-center text-sm font-bold uppercase tracking-wide">{receipt.storeName}</div>
-      {receipt.orgLegalName && <div className="text-center text-[11px]">{receipt.orgLegalName}</div>}
+      <div className="text-center text-sm font-bold uppercase tracking-wide">
+        {receipt.storeName}
+      </div>
+      {receipt.orgLegalName && (
+        <div className="text-center text-[11px]">{receipt.orgLegalName}</div>
+      )}
       {receipt.addressStr && (
         <div className="text-center text-[10px] text-gray-600">{receipt.addressStr}</div>
       )}
@@ -74,8 +79,7 @@ export function ReceiptPrintContent({
 
       <div className="my-1.5 border-t border-dashed border-gray-300" />
 
-      <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem_3.5rem_3.5rem] gap-x-1 text-[10px] font-bold">
-        <span>HSN</span>
+      <div className="grid grid-cols-[minmax(0,1fr)_2rem_3.5rem_3.5rem] gap-x-1 text-[10px] font-bold">
         <span>Item</span>
         <span className="text-right">Qty</span>
         <span className="text-right">Rate</span>
@@ -85,21 +89,26 @@ export function ReceiptPrintContent({
       <div className="my-1 border-t border-gray-300" />
 
       {receipt.itemsWithGst.map((item, idx) => {
-        const name = item.variantName || item.sku || `Item ${idx + 1}`;
-        const hsn = item.hsnCode || item.sku?.split("-")[0] || "";
+        const name = item.variantName || `Item ${idx + 1}`;
         return (
           <div key={`${item.productVariantId ?? item.sku ?? idx}-${idx}`}>
-            <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem_3.5rem_3.5rem] items-start gap-x-1 text-[10px]">
-              <span className="tabular-nums">{hsn.slice(0, 8)}</span>
+            <div className="grid grid-cols-[minmax(0,1fr)_2rem_3.5rem_3.5rem] items-start gap-x-1 text-[10px]">
               <span className="break-words whitespace-normal leading-tight">{name}</span>
-              <span className="tabular-nums text-right">{item.quantity}</span>
+              <span className="tabular-nums text-right">
+                {item.quantityUnit === "KG" ? formatWeight(item.quantity) : item.quantity}
+              </span>
               <span className="tabular-nums text-right">
                 {formatINR(item.unitPrice)}
+                {item.quantityUnit === "KG" ? "/KG" : ""}
               </span>
-              <span className="tabular-nums text-right">
-                {formatINR(item.lineTotal)}
-              </span>
+              <span className="tabular-nums text-right">{formatINR(item.lineTotal)}</span>
             </div>
+            {item.markdownCode ? (
+              <div className="mb-0.5 text-[9px] font-bold text-gray-600">
+                MARKDOWN · Batch {item.batchNumber || "—"}
+                {item.basePrice != null ? ` · Was ${formatINR(item.basePrice)}` : ""}
+              </div>
+            ) : null}
             {item.taxRate > 0 && (
               <div className="-mt-0.5 mb-0.5 text-right text-[9px] text-gray-500">
                 CGST @{item.taxRate / 2}%: {formatINR(item.cgst)} SGST @{item.taxRate / 2}%:{" "}
@@ -122,7 +131,9 @@ export function ReceiptPrintContent({
         </div>
         {receipt.discount > 0 && (
           <div className="flex justify-between">
-            <span>Discount{receipt.discountPercent > 0 ? ` @ ${receipt.discountPercent}%` : ""}:</span>
+            <span>
+              Discount{receipt.discountPercent > 0 ? ` @ ${receipt.discountPercent}%` : ""}:
+            </span>
             <span className="tabular-nums">-{formatINR(receipt.discount)}</span>
           </div>
         )}
@@ -213,9 +224,15 @@ export function ReceiptPrintContent({
       <div className="mt-2 text-center text-[9px] text-gray-500">
         Goods once sold will not be taken back unless covered under applicable return policy.
       </div>
-      <div className="text-center text-[9px] text-gray-500">Amount shown above is inclusive of GST.</div>
-      <div className="text-center text-[9px] text-gray-500">This is a computer generated invoice.</div>
-      <div className="mt-2 text-center text-[10px] font-medium">Thank You for shopping with us.</div>
+      <div className="text-center text-[9px] text-gray-500">
+        Amount shown above is inclusive of GST.
+      </div>
+      <div className="text-center text-[9px] text-gray-500">
+        This is a computer generated invoice.
+      </div>
+      <div className="mt-2 text-center text-[10px] font-medium">
+        Thank You for shopping with us.
+      </div>
     </div>
   );
 }

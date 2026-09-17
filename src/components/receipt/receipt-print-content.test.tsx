@@ -60,6 +60,28 @@ const receipt: NormalizedReceipt = {
 };
 
 describe("ReceiptPrintContent", () => {
+  it("renders weighted quantity in grams and identifies the per-KG rate", () => {
+    render(
+      <ReceiptPrintContent
+        receipt={{
+          ...receipt,
+          itemsWithGst: [
+            {
+              ...receipt.itemsWithGst[0],
+              quantity: 0.5,
+              quantityUnit: "KG",
+              unitPrice: 120,
+              lineTotal: 60,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("500 g")).toBeInTheDocument();
+    expect(screen.getByText("₹120.00/KG")).toBeInTheDocument();
+  });
+
   it("renders the full long item name while keeping numeric columns visible", () => {
     render(<ReceiptPrintContent receipt={receipt} />);
 
@@ -69,5 +91,7 @@ describe("ReceiptPrintContent", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("₹127.50")).toBeInTheDocument();
     expect(screen.getAllByText("₹255.00").length).toBeGreaterThan(0);
+    expect(screen.queryByText("HSN")).not.toBeInTheDocument();
+    expect(screen.queryByText("1001")).not.toBeInTheDocument();
   });
 });
