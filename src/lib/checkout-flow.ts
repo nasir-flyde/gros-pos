@@ -5,6 +5,7 @@ import {
   type CheckoutPayment,
   type CheckoutPayload,
 } from "./order-payload";
+import type { GstBuyer } from "./gst-billing";
 
 export type PosPaymentSelection = "Cash" | "UPI" | "Card" | "Wallet" | "Split" | "Paytm POS";
 
@@ -71,6 +72,9 @@ export interface BuildPosCheckoutPayloadArgs {
   cashierId: string;
   charges: { delivery: number; discount: number; discountPercent?: number };
   customerId?: string;
+  gstBill?: boolean;
+  gstBuyer?: GstBuyer;
+  couponCode?: string;
   orderId?: string;
   quoteVersion?: string | null;
 }
@@ -85,6 +89,9 @@ export const buildPosCheckoutPayload = ({
   cashierId,
   charges,
   customerId,
+  gstBill,
+  gstBuyer,
+  couponCode,
   orderId,
   quoteVersion,
 }: BuildPosCheckoutPayloadArgs): CheckoutPayload => ({
@@ -99,6 +106,8 @@ export const buildPosCheckoutPayload = ({
     orderId,
   ),
   ...(quoteVersion ? { quoteVersion } : {}),
+  ...(couponCode ? { couponCode } : {}),
+  ...(gstBill && gstBuyer ? { gstBill: true, gstBuyer } : {}),
 });
 
 export const buildPaytmPosRequestPayload = (
@@ -117,6 +126,8 @@ export const buildPaytmPosRequestPayload = (
   const { payments: _payments, ...paytmPayload } = payload;
   return {
     ...paytmPayload,
+    ...(args.gstBill && args.gstBuyer ? { gstBill: true, gstBuyer: args.gstBuyer } : {}),
     ...(args.quoteVersion ? { quoteVersion: args.quoteVersion } : {}),
+    ...(args.couponCode ? { couponCode: args.couponCode } : {}),
   };
 };

@@ -176,8 +176,13 @@ function isNotFoundError(error: unknown): boolean {
 }
 
 export function getEffectiveVariantPrice(
-  variant: Pick<PosVariant, "finalPrice" | "sellingPrice" | "pricePerUnit" | "mrp">,
+  variant: Pick<PosVariant, "finalPrice" | "sellingPrice" | "pricePerUnit" | "mrp"> &
+    Partial<Pick<PosVariant, "sellingMode">>,
 ): number {
+  // Match /pos/catalog: loose goods use the saved per-KG rate, not store package pricing.
+  if (variant.sellingMode === "WEIGHT") {
+    return variant.pricePerUnit ?? variant.mrp ?? 0;
+  }
   return variant.finalPrice ?? variant.sellingPrice ?? variant.pricePerUnit ?? variant.mrp ?? 0;
 }
 

@@ -23,6 +23,7 @@ import {
   type StoreDeliveryOrder,
 } from "@/lib/order-api";
 import { deliveryApi, type ManualDeliveryReason } from "@/lib/delivery-api";
+import { fulfillmentApi } from "@/lib/fulfillment-api";
 import { fetchAndPrintOrderReceipt } from "@/lib/order-receipt";
 import {
   FulfillmentOrderSection,
@@ -55,11 +56,12 @@ export const Route = createFileRoute("/_pos/delivery")({
   component: DeliveryPage,
 });
 
-type HomeView = "READY" | "ASSIGNED" | "IN_TRANSIT" | "HISTORY";
+type HomeView = "PENDING_PACKING" | "READY" | "ASSIGNED" | "IN_TRANSIT" | "HISTORY";
 type AssignmentMode = "IN_HOUSE" | "THIRD_PARTY";
 type ManualAction = "PICKUP" | "DELIVER";
 
 const HOME_VIEWS: Array<{ value: HomeView; label: string }> = [
+  { value: "PENDING_PACKING", label: "Pending Packing" },
   { value: "READY", label: "Ready to Assign" },
   { value: "ASSIGNED", label: "Assigned" },
   { value: "IN_TRANSIT", label: "In Transit" },
@@ -85,6 +87,9 @@ const formatAddress = (order: StoreDeliveryOrder) => {
 
 const orderMatchesView = (order: StoreDeliveryOrder, view: HomeView) => {
   const status = order.deliveryAssignment?.status;
+  if (view === "PENDING_PACKING") {
+    return !status && !order.isDeliveryAssignable && order.fulfillmentStatus !== "CANCELLED";
+  }
   if (view === "READY") return order.isDeliveryAssignable;
   if (view === "ASSIGNED") return status === "ASSIGNED";
   if (view === "IN_TRANSIT") return status === "PICKED_UP" || status === "OUT_FOR_DELIVERY";
@@ -98,7 +103,7 @@ export function DeliveryPage() {
   const stores = useMemo(() => scopes.filter((scope) => scope.type === "store"), [scopes]);
   const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
   const [search, setSearch] = useState("");
-  const [homeView, setHomeView] = useState<HomeView>("READY");
+  const [homeView, setHomeView] = useState<HomeView>("PENDING_PACKING");
   const [selectedHomeId, setSelectedHomeId] = useState<string | null>(null);
   const [selectedPickupId, setSelectedPickupId] = useState<string | null>(null);
   const [assignmentOrder, setAssignmentOrder] = useState<StoreDeliveryOrder | null>(null);
@@ -121,6 +126,7 @@ export function DeliveryPage() {
 
   const canAssign = permissions.includes("delivery.manifest.create");
   const canConfirm = permissions.includes("delivery.confirm");
+  const canFulfill = permissions.includes("order.fulfill");
   const canViewAgents = permissions.includes("delivery.manifest.view");
 
   const homeQuery = useQuery({
@@ -244,6 +250,34 @@ export function DeliveryPage() {
     },
     onError: (error: unknown) =>
       toast.error(getErrorMessage(error, "Delivery status could not be updated.")),
+  });
+
+  const markPackedMutation = useMutation({
+    mutationFn: async (order: StoreDeliveryOrder) => {
+      const tasksResponse = await fulfillmentApi.listTasks({ storeId, limit: 100 });
+      const task = tasksResponse.data.find(
+        (entry) => fulfillmentApi.orderIdValue(entry) === order._id,
+      );
+      if (!task) throw new Error("Packing task was not found for this order.");
+
+      await fulfillmentApi.startPicking(task._id);
+      const taskDetail = (await fulfillmentApi.getTask(task._id)).data;
+      await Promise.all(
+        taskDetail.items.map((item) =>
+          fulfillmentApi.recordPick(task._id, {
+            fulfillmentItemId: item._id,
+            quantityPicked: item.quantityRequested,
+          }),
+        ),
+      );
+      return fulfillmentApi.completePicking(task._id);
+    },
+    onSuccess: async () => {
+      toast.success("Order marked packed");
+      await refreshDeliveryData();
+    },
+    onError: (error: unknown) =>
+      toast.error(getErrorMessage(error, "Order could not be marked packed.")),
   });
 
   const pickupConfirmMutation = useMutation({
@@ -371,8 +405,13 @@ export function DeliveryPage() {
               selectedOrderId={selectedHomeId}
               canAssign={canAssign}
               canConfirm={canConfirm}
+              canFulfill={canFulfill}
+              packingOrderId={
+                markPackedMutation.isPending ? markPackedMutation.variables?._id ?? null : null
+              }
               onSelect={setSelectedHomeId}
               onAssign={setAssignmentOrder}
+              onMarkPacked={(order) => markPackedMutation.mutate(order)}
               onManual={openManualDialog}
             />
             <DispatchDetail
@@ -453,8 +492,11 @@ function HomeDeliveryTable({
   selectedOrderId,
   canAssign,
   canConfirm,
+  canFulfill,
+  packingOrderId,
   onSelect,
   onAssign,
+  onMarkPacked,
   onManual,
 }: {
   orders: StoreDeliveryOrder[];
@@ -463,8 +505,11 @@ function HomeDeliveryTable({
   selectedOrderId: string | null;
   canAssign: boolean;
   canConfirm: boolean;
+  canFulfill: boolean;
+  packingOrderId: string | null;
   onSelect: (orderId: string) => void;
   onAssign: (order: StoreDeliveryOrder) => void;
+  onMarkPacked: (order: StoreDeliveryOrder) => void;
   onManual: (order: StoreDeliveryOrder, action: ManualAction) => void;
 }) {
   return (
@@ -540,6 +585,21 @@ function HomeDeliveryTable({
                       {canAssign && order.isDeliveryAssignable ? (
                         <Button size="sm" onClick={() => onAssign(order)}>
                           <UserRound /> Assign
+                        </Button>
+                      ) : null}
+                      {canFulfill && !assignment && !order.isDeliveryAssignable ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => onMarkPacked(order)}
+                          disabled={packingOrderId === order._id}
+                        >
+                          {packingOrderId === order._id ? (
+                            <Loader2 className="animate-spin" />
+                          ) : (
+                            <PackageCheck />
+                          )}
+                          Mark Packed
                         </Button>
                       ) : null}
                       {canConfirm && assignment?.status === "ASSIGNED" ? (

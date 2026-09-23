@@ -123,8 +123,7 @@ describe("generateReceiptPdf", () => {
 
     expect(wrappedNameLines.length).toBeGreaterThan(1);
     expect(wrappedNameLines.some((call) => call.text.includes("Pack 5kg"))).toBe(true);
-    expect(textCalls.some((call) => call.text.includes("HSN"))).toBe(false);
-    expect(textCalls.some((call) => call.text.trim() === "1001")).toBe(false);
+    expect(textCalls.some((call) => call.text === "HSN Code: 1001")).toBe(true);
 
     const nextItemCall = textCalls.find((call) => call.text === "Rock Salt");
     const lastWrappedLine = wrappedNameLines.at(-1);
@@ -132,5 +131,51 @@ describe("generateReceiptPdf", () => {
     expect(nextItemCall).toBeDefined();
     expect(lastWrappedLine).toBeDefined();
     expect(nextItemCall?.y ?? 0).toBeGreaterThan(lastWrappedLine?.y ?? 0);
+  });
+
+  it("prints the saved HSN code on a B2B receipt", () => {
+    generateReceiptPdf({
+      storeName: "CHHOTA BAZAAR",
+      invoiceNumber: "INV-1002",
+      itemCount: 1,
+      totalQty: 1,
+      grossAmount: 105,
+      discount: 0,
+      discountPercent: 0,
+      netSalesValue: 105,
+      grandTotal: 105,
+      paymentMode: "CASH",
+      totalCgst: 2.5,
+      totalSgst: 2.5,
+      totalGst: 5,
+      taxableValue: 100,
+      gstByRate: {},
+      gstBuyer: {
+        name: "Charanjeet Singh",
+        gstin: "23AFOPS4000B1ZZ",
+        pan: "AFOPS4000B",
+        stateCode: "23",
+        stateName: "Madhya Pradesh",
+        taxType: "INTRA",
+      },
+      itemsWithGst: [
+        {
+          variantName: "AAKASH BESAN LADOO 400g CBD",
+          sku: "LADOO-400",
+          hsnCode: "21069099",
+          unitPrice: 105,
+          quantity: 1,
+          lineTotal: 105,
+          netPrice: 100,
+          taxRate: 5,
+          cgst: 2.5,
+          sgst: 2.5,
+        },
+      ],
+    });
+
+    expect(textCalls.some((call) => call.text.includes("HSN Code"))).toBe(true);
+    expect(textCalls.some((call) => call.text.includes("21069099"))).toBe(true);
+    expect(textCalls.some((call) => call.text.includes("CGST @ 2.50%"))).toBe(true);
   });
 });

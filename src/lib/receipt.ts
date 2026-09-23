@@ -1,5 +1,6 @@
 import type { PosCartCustomer } from "./cart-context";
 import type { PosOrder } from "./order-api";
+import type { GstBuyer } from "./gst-billing";
 
 export interface ReceiptLineItem {
   productVariantId?: string;
@@ -15,6 +16,8 @@ export interface ReceiptLineItem {
   lineTotal: number;
   cgst: number;
   sgst: number;
+  igst: number;
+  netPrice: number;
   hsnCode: string;
   markdownCode?: string;
   batchNumber?: string;
@@ -38,6 +41,7 @@ export interface NormalizedReceipt {
   paymentMode: string;
   orderNumber: string;
   invoiceNumber: string;
+  issuedAt?: string;
   cashierName: string;
   customerName: string;
   addressStr: string;
@@ -46,7 +50,10 @@ export interface NormalizedReceipt {
   totalQty: number;
   grossAmount: number;
   netSalesValue: number;
-  gstByRate: Record<number, { taxable: number; cgst: number; sgst: number }>;
+  gstByRate: Record<number, { taxable: number; cgst: number; sgst: number; igst: number }>;
+  gstBuyer:
+    | (GstBuyer & { pan: string; stateCode: string; stateName: string; taxType: "INTRA" | "INTER" })
+    | null;
   storeName: string;
   storePhone: string;
   storeCode: string;
@@ -56,6 +63,7 @@ export interface NormalizedReceipt {
   cinNumber: string;
   totalCgst: number;
   totalSgst: number;
+  totalIgst: number;
   totalGst: number;
   taxableValue: number;
   paymentRef: string;
@@ -122,6 +130,8 @@ export function normalizeReceiptData(
   const storeInfo = asObject(nested.storeInfo) ?? asObject(root.storeInfo) ?? {};
   const storeAddress = asObject(storeInfo.address) ?? {};
   const orgInfo = asObject(nested.organizationInfo) ?? {};
+  const gstBuyer = nested.saleType === "B2B" ? asObject(nested.gstBuyer) : null;
+  const isInterState = gstBuyer?.taxType === "INTER";
   const payments =
     asArray(nested.payments).length > 0 ? asArray(nested.payments) : asArray(root.payments);
   const rawItems = asArray(nested.items).length > 0 ? asArray(nested.items) : asArray(root.items);
@@ -138,17 +148,20 @@ export function normalizeReceiptData(
   const changeAmount = asNumber(nested.changeAmount, asNumber(root.changeAmount, 0));
   const orderNumber = asString(nested.orderNumber, asString(root.orderNumber, fallback.orderId));
   const invoiceNumber = asString(root.receiptNumber, orderNumber);
+  const issuedAt = asString(root.generatedAt, asString(root.createdAt, ""));
   const cashierName = asString(nested.cashierName, asString(root.cashierName, ""));
-  const customerName = asString(
-    nested.customerName,
-    asString(root.customerName, fallback.customer?.name ?? ""),
-  );
+  const customerName = gstBuyer
+    ? asString(gstBuyer.name)
+    : asString(nested.customerName, asString(root.customerName, fallback.customer?.name ?? ""));
   const paymentMode = asString(nested.paymentMode, asString(root.paymentMode, fallback.payment));
   const storeName = asString(storeInfo.storeName, "Store");
   const storePhone = asString(storeInfo.phone, "");
   const storeCode = asString(storeInfo.storeCode, "");
   const orgLegalName = asString(orgInfo.legalName, "");
-  const orgGstin = asString(orgInfo.gstNumber, asString(storeInfo.gstNumber, ""));
+  const orgGstin = asString(
+    gstBuyer?.sellerGstin,
+    asString(orgInfo.gstNumber, asString(storeInfo.gstNumber, "")),
+  );
   const fssaiLicense = asString(orgInfo.fssaiLicense, asString(storeInfo.fssaiLicense, ""));
   const cinNumber = asString(orgInfo.cinNumber, asString(storeInfo.cinNumber, ""));
 
@@ -160,25 +173,28 @@ export function normalizeReceiptData(
   const addressStr = [line1, line2].filter(Boolean).join(", ");
   const cityLine = [city, state, pincode].filter(Boolean).join(", ");
 
-  const gstByRate: Record<number, { taxable: number; cgst: number; sgst: number }> = {};
+  const gstByRate: Record<number, { taxable: number; cgst: number; sgst: number; igst: number }> =
+    {};
   const itemsWithGst: ReceiptLineItem[] = rawItems.map((entry, index) => {
     const item = asObject(entry) ?? {};
     const rate = asNumber(item.taxRate, 0);
     const lineTotal = asNumber(item.lineTotal, 0);
-    const halfRate = rate / 2;
     const taxable =
       rate > 0 ? Math.round(((lineTotal * 100) / (100 + rate)) * 100) / 100 : lineTotal;
-    const cgst = Math.round(((taxable * halfRate) / 100) * 100) / 100;
-    const sgst = Math.round(((taxable * halfRate) / 100) * 100) / 100;
+    const totalTax = Math.round((lineTotal - taxable) * 100) / 100;
+    const cgst = isInterState ? 0 : Math.round((totalTax / 2) * 100) / 100;
+    const sgst = isInterState ? 0 : Math.round((totalTax - cgst) * 100) / 100;
+    const igst = isInterState ? totalTax : 0;
     const sku = asString(item.sku, "");
-    const hsnCode = sku.split("-")[0] || "";
+    const hsnCode = asString(item.hsnCode, sku.split("-")[0] || "");
 
     if (!gstByRate[rate]) {
-      gstByRate[rate] = { taxable: 0, cgst: 0, sgst: 0 };
+      gstByRate[rate] = { taxable: 0, cgst: 0, sgst: 0, igst: 0 };
     }
     gstByRate[rate].taxable += taxable;
     gstByRate[rate].cgst += cgst;
     gstByRate[rate].sgst += sgst;
+    gstByRate[rate].igst += igst;
 
     return {
       productVariantId: asString(item.productVariantId, undefined),
@@ -194,6 +210,10 @@ export function normalizeReceiptData(
       lineTotal,
       cgst,
       sgst,
+      igst,
+      netPrice: asNumber(item.quantity, 0)
+        ? Math.round((taxable / asNumber(item.quantity, 1)) * 100) / 100
+        : 0,
       hsnCode,
       markdownCode: asString(item.markdownCode, undefined),
       batchNumber: asString(item.batchNumber, undefined),
@@ -209,7 +229,8 @@ export function normalizeReceiptData(
   const netSalesValue = subtotal - discount;
   const totalCgst = Object.values(gstByRate).reduce((sum, item) => sum + item.cgst, 0);
   const totalSgst = Object.values(gstByRate).reduce((sum, item) => sum + item.sgst, 0);
-  const totalGst = totalCgst + totalSgst;
+  const totalIgst = Object.values(gstByRate).reduce((sum, item) => sum + item.igst, 0);
+  const totalGst = totalCgst + totalSgst + totalIgst;
   const taxableValue = Object.values(gstByRate).reduce((sum, item) => sum + item.taxable, 0);
   const firstPayment = asObject(payments[0]) ?? {};
   const paymentRefSource = firstPayment.referenceNumber ?? firstPayment._id;
@@ -232,6 +253,7 @@ export function normalizeReceiptData(
     paymentMode,
     orderNumber,
     invoiceNumber,
+    issuedAt,
     cashierName,
     customerName,
     addressStr,
@@ -241,6 +263,7 @@ export function normalizeReceiptData(
     grossAmount: Math.round(grossAmount * 100) / 100,
     netSalesValue: Math.round(netSalesValue * 100) / 100,
     gstByRate,
+    gstBuyer: gstBuyer as NormalizedReceipt["gstBuyer"],
     storeName,
     storePhone,
     storeCode,
@@ -250,6 +273,7 @@ export function normalizeReceiptData(
     cinNumber,
     totalCgst: Math.round(totalCgst * 100) / 100,
     totalSgst: Math.round(totalSgst * 100) / 100,
+    totalIgst: Math.round(totalIgst * 100) / 100,
     totalGst: Math.round(totalGst * 100) / 100,
     taxableValue: Math.round(taxableValue * 100) / 100,
     paymentRef,

@@ -137,6 +137,7 @@ const CheckoutPage = (
 describe("Checkout production states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    quoteMock.mockResolvedValue({ data: { coupon: { code: "SAVE10", discountAmount: 10 } } });
     stockMock.mockResolvedValue([{ _id: "variant-1", quantityAvailable: 2 }]);
     checkoutMock.mockResolvedValue({
       data: {
@@ -189,5 +190,36 @@ describe("Checkout production states", () => {
     );
     expect(clearMock).toHaveBeenCalledOnce();
     expect(navigateMock).toHaveBeenCalledWith({ to: "/success" });
+  });
+
+  it("quotes a coupon before adding it to checkout", async () => {
+    render(<CheckoutPage />);
+
+    fireEvent.change(screen.getByLabelText("Coupon code"), { target: { value: "save10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() =>
+      expect(quoteMock).toHaveBeenCalledWith(
+        expect.objectContaining({ storeId: "store-1", couponCode: "SAVE10" }),
+      ),
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /place order/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /place order/i }));
+    await waitFor(() =>
+      expect(checkoutMock).toHaveBeenCalledWith(expect.objectContaining({ couponCode: "SAVE10" })),
+    );
+  });
+
+  it("shows rejected coupon errors without applying the code", async () => {
+    quoteMock.mockRejectedValueOnce(new Error("Coupon is not available at this store"));
+    render(<CheckoutPage />);
+
+    fireEvent.change(screen.getByLabelText("Coupon code"), { target: { value: "OTHERSTORE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Coupon is not available at this store",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /place order/i }));
+    await waitFor(() => expect(checkoutMock).toHaveBeenCalledOnce());
+    expect(checkoutMock.mock.calls[0][0]).not.toHaveProperty("couponCode");
   });
 });

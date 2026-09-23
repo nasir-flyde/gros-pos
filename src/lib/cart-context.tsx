@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import type { OrderItem, PosOrder } from "./order-api";
+import type { MarkdownLabelResolution } from "./markdown-api";
 import { roundCurrency } from "./order-payload";
 import { normalizeKg } from "./weight";
 
@@ -19,6 +20,7 @@ export interface CartProduct {
   expiryDate?: string;
   basePrice?: number;
   remainingMarkdownQuantity?: number;
+  markdownOption?: MarkdownLabelResolution;
   sellingMode?: "FIXED" | "WEIGHT";
   unitType?: string;
   unitValue?: number;
@@ -61,6 +63,7 @@ type CartCtx = {
   setActiveOrderId: (orderId: string | null) => void;
   updateStockLevels: (stockByVariantId: Record<string, number>) => void;
   updateMarkdownAvailability: (markdownCode: string, remainingQuantity: number) => void;
+  applyMarkdown: (id: string) => QuantityUpdateResult;
   loadHeldOrder: (order: PosOrder) => void;
   subtotal: number;
   discount: number;
@@ -309,6 +312,59 @@ function ScopedCartProvider({ children, storageKey }: { children: ReactNode; sto
       ),
     });
   };
+  const applyMarkdown = (id: string): QuantityUpdateResult => {
+    if (activeOrderIdRef.current) {
+      return {
+        success: false,
+        error: "Markdown stock cannot be added to a resumed held order.",
+      };
+    }
+    const item = itemsRef.current.find(
+      (entry) => (entry.product.lineKey || entry.product._id) === id,
+    );
+    const markdown = item?.product.markdownOption;
+    if (!item || !markdown) {
+      return { success: false, error: "No active markdown price is available." };
+    }
+    if (item.qty > markdown.remainingQuantity) {
+      return {
+        success: false,
+        error: `Only ${markdown.remainingQuantity} markdown units remain. Reduce the cart quantity first.`,
+      };
+    }
+    const existingMarkdownLine = itemsRef.current.find(
+      (entry) => entry.product.markdownCode === markdown.markdownCode,
+    );
+    if (existingMarkdownLine && existingMarkdownLine !== item) {
+      return { success: false, error: "This markdown batch is already in the cart." };
+    }
+
+    commitCartState({
+      nextItems: itemsRef.current.map((entry) =>
+        entry === item
+          ? {
+              ...entry,
+              product: {
+                ...entry.product,
+                lineKey: markdown.markdownCode,
+                mrp: markdown.basePrice,
+                basePrice: markdown.basePrice,
+                price: markdown.effectivePrice,
+                quantityAvailable: markdown.remainingQuantity,
+                remainingMarkdownQuantity: markdown.remainingQuantity,
+                markdownCode: markdown.markdownCode,
+                batchId: markdown.batchId,
+                batchNumber: markdown.batchNumber,
+                expiryDate: markdown.expiryDate,
+                markdownOption: undefined,
+              },
+            }
+          : entry,
+      ),
+    });
+    return { success: true };
+  };
+
   const updateMarkdownAvailability = (markdownCode: string, remainingQuantity: number) => {
     commitCartState({
       nextItems: itemsRef.current.map((item) =>
@@ -396,6 +452,7 @@ function ScopedCartProvider({ children, storageKey }: { children: ReactNode; sto
         setActiveOrderId,
         updateStockLevels,
         updateMarkdownAvailability,
+        applyMarkdown,
         loadHeldOrder,
         subtotal,
         discount,

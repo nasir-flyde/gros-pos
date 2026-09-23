@@ -175,8 +175,8 @@ export interface PosQuoteResult {
     promotionType?: string;
     discountAmount: number;
   }>;
-  coupon: Record<string, unknown> | null;
-  couponDecision: Record<string, unknown>;
+  coupon: { code: string; discountAmount: number } | null;
+  couponDecision: { status?: string; code?: string };
   quoteVersion: string | null;
 }
 
