@@ -82,6 +82,14 @@ export function generateReceiptPdf(r: Record<string, unknown>) {
 
   hrDash();
   txt("TAX INVOICE", { size: 11, bold: true, align: "center" });
+  if (data.gstBuyer) {
+    txt("Original for Recipient", { size: 8, bold: true, align: "center" });
+    txt(`Customer: ${data.gstBuyer.name}`, { size: 7, bold: true });
+    txt(`GSTIN: ${data.gstBuyer.gstin}  PAN: ${data.gstBuyer.pan}`, { size: 7 });
+    txt(`Place of Supply & State Code: ${data.gstBuyer.stateCode} ${data.gstBuyer.stateName}`, {
+      size: 7,
+    });
+  }
   hrDash();
 
   txt(`Invoice No : ${data.invoiceNumber}`, { size: FONT_SIZE - 1 });
@@ -99,6 +107,14 @@ export function generateReceiptPdf(r: Record<string, unknown>) {
     c3 = 20,
     c4 = 20;
   function itemHeader() {
+    if (data.gstBuyer) {
+      txt("HSN Code    Item Description              Net Price   Qty       Value", {
+        bold: true,
+        size: FONT_SIZE - 1,
+      });
+      hrDash();
+      return;
+    }
     txt(pad("Item", c1) + pad("Qty", c2, "r") + pad("Rate", c3, "r") + pad("Amount", c4, "r"), {
       bold: true,
       size: FONT_SIZE - 1,
@@ -111,7 +127,7 @@ export function generateReceiptPdf(r: Record<string, unknown>) {
   const x2 = x1 + c1;
   const x3 = x2 + c2;
   const x4 = x3 + c3;
-  for (const item of data.itemsWithGst as Array<Record<string, unknown>>) {
+  for (const [index, item] of (data.itemsWithGst as Array<Record<string, unknown>>).entries()) {
     const name = (item.variantName as string) || "Item";
     const isWeighted = item.quantityUnit === "KG" || item.sellingMode === "WEIGHT";
     const qty = isWeighted
@@ -120,6 +136,24 @@ export function generateReceiptPdf(r: Record<string, unknown>) {
     const rate = `${fmt(item.unitPrice as number)}${isWeighted ? "/kg" : ""}`;
     const amt = fmt(item.lineTotal as number);
     const wrappedName = splitText(name, c1, FONT_SIZE - 1);
+
+    if (data.gstBuyer) {
+      const taxRate = Number(item.taxRate || 0);
+      txt(
+        data.gstBuyer.taxType === "INTER"
+          ? `${index + 1}) IGST @ ${fmt(taxRate)}%`
+          : `${index + 1}) CGST @ ${fmt(taxRate / 2)}%   SGST @ ${fmt(taxRate / 2)}%`,
+        { size: 7 },
+      );
+      txt(
+        `${String(item.hsnCode || "").padEnd(12)}${fmt(item.netPrice as number).padStart(35)}${qty.padStart(7)}${amt.padStart(13)}`,
+        { size: 7 },
+      );
+      for (const line of splitText(name.toUpperCase(), CW, FONT_SIZE - 1)) {
+        txt(line, { size: FONT_SIZE - 1, bold: true });
+      }
+      continue;
+    }
 
     doc.setFont(FONT, "normal");
     doc.setFontSize(FONT_SIZE - 1);
@@ -132,6 +166,10 @@ export function generateReceiptPdf(r: Record<string, unknown>) {
     for (const line of wrappedName.slice(1)) {
       doc.text(line, x1, y);
       y += LH;
+    }
+
+    if (item.hsnCode) {
+      txt(`HSN Code: ${String(item.hsnCode)}`, { size: 6, spacing: SM });
     }
 
     const taxRate = (item.taxRate as number) || 0;
@@ -282,6 +320,14 @@ interface ReceiptData {
   totalSgst: number;
   totalGst: number;
   taxableValue: number;
+  gstBuyer?: {
+    name: string;
+    gstin: string;
+    pan: string;
+    stateCode: string;
+    stateName: string;
+    taxType: "INTRA" | "INTER";
+  } | null;
   gstByRate: Record<string, { taxable: number; cgst: number; sgst: number }>;
   itemsWithGst: Array<{
     variantName: string;
@@ -293,6 +339,8 @@ interface ReceiptData {
     taxRate: number;
     cgst: number;
     sgst: number;
+    igst?: number;
+    netPrice?: number;
   }>;
   gstSlabs: Array<{ rate: number; taxable: number; cgst: number; sgst: number; total: number }>;
   delivery: string;
