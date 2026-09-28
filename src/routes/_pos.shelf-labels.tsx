@@ -330,7 +330,7 @@ function ShelfLabelPage() {
                     onChange={(event) => setLayout(event.target.value as ShelfLabelLayout)}
                   >
                     <option value="THERMAL_50X30">Thermal — 50 × 30 mm</option>
-                    <option value="A4_50X30">A4 sheet — 36 labels</option>
+                    <option value="A4_50X30">A4 sheet — 1 POP per page</option>
                   </select>
                 </label>
               </section>
@@ -720,7 +720,7 @@ function HistoryTable({
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    {batch.layout === "THERMAL_50X30" ? "Thermal 50 × 30" : "A4 · 36 per page"}
+                    {batch.layout === "THERMAL_50X30" ? "Thermal 50 × 30" : "A4 · 1 POP per page"}
                   </td>
                   <td className="px-4 py-3 font-extrabold">{batch.totalLabels}</td>
                   <td className="px-4 py-3">{formatDate(batch.generatedAt)}</td>

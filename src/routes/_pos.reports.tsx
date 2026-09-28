@@ -13,11 +13,21 @@ export const Route = createFileRoute("/_pos/reports")({
 });
 
 const inr = (value: number) => `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+const currentGstMonth = () => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const fields = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${fields.year}-${fields.month}`;
+};
 
 function ReportsPage() {
   const { scopes } = useAuthStore();
   const storeId = scopes.find((scope) => scope.type === "store")?.id ?? "";
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [gstMonth, setGstMonth] = useState(currentGstMonth);
   const params = useMemo(
     () => ({
       storeId,
@@ -37,6 +47,11 @@ function ReportsPage() {
     onSuccess: () => toast.success("Daily sales report downloaded"),
     onError: (error) => toast.error(getErrorMessage(error, "Report export failed")),
   });
+  const b2bExport = useMutation({
+    mutationFn: () => reportApi.downloadB2BGstSales({ storeId, month: gstMonth }),
+    onSuccess: () => toast.success("B2B GST sales CSV downloaded"),
+    onError: (error) => toast.error(getErrorMessage(error, "B2B export failed")),
+  });
 
   const rows = useMemo(() => reportsQuery.data?.data.rows ?? [], [reportsQuery.data]);
   const metrics = useMemo(
@@ -51,6 +66,30 @@ function ReportsPage() {
 
   return (
     <div className="h-full overflow-y-auto p-5">
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border-2 bg-card p-4">
+        <div>
+          <div className="font-extrabold">B2B GST sales for finance</div>
+          <div className="text-xs text-muted-foreground">Monthly invoice and tax breakdown CSV</div>
+        </div>
+        <label className="text-xs font-bold">
+          Month
+          <input
+            type="month"
+            aria-label="B2B GST month"
+            value={gstMonth}
+            onChange={(event) => setGstMonth(event.target.value)}
+            className="mt-1 block rounded-lg border p-2"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={!storeId || !gstMonth || b2bExport.isPending}
+          onClick={() => b2bExport.mutate()}
+          className="rounded-lg bg-[var(--brand-blue)] px-4 py-2 font-extrabold text-white disabled:opacity-50"
+        >
+          Download B2B CSV
+        </button>
+      </div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold">Daily Sales Report</h1>

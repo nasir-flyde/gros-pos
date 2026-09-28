@@ -83,4 +83,54 @@ describe("checkout flow helpers", () => {
       expect.objectContaining({ productVariantId: "variant-4", quantity: 1 }),
     ]);
   });
+
+  it("passes a coupon code through quotes, checkout, and Paytm requests", () => {
+    const common = {
+      cartItems: [{ product: { _id: "variant-5", mrp: 100, price: 100 }, qty: 1 }],
+      grandTotal: 90,
+      deliveryType: "Walk-Out" as const,
+      storeId: "store-1",
+      cashierId: "cashier-1",
+      charges: { delivery: 0, discount: 0 },
+      couponCode: "SAVE10",
+    };
+    expect(buildPaytmPosRequestPayload(common).couponCode).toBe("SAVE10");
+    expect(
+      buildPosCheckoutPayload({
+        ...common,
+        payment: "UPI",
+        splitPayments: { CASH: "", UPI: "", CARD: "", WALLET: "" },
+      }),
+    ).toMatchObject({ couponCode: "SAVE10", payments: [{ amount: 90 }] });
+  });
+
+  it("keeps GST buyer details in normal and device payment requests", () => {
+    const gstBuyer = {
+      gstin: "23AFOPS4000B1ZZ",
+      name: "Charanjeet Singh",
+      flatDoorNo: "111",
+      streetLocality: "Maxi Road",
+      city: "Ujjain",
+      state: "Madhya Pradesh",
+      pincode: "456010",
+    };
+    const common = {
+      cartItems: [{ product: { _id: "variant-6", mrp: 105, price: 105 }, qty: 1 }],
+      grandTotal: 105,
+      deliveryType: "Walk-Out" as const,
+      storeId: "store-1",
+      cashierId: "cashier-1",
+      charges: { delivery: 0, discount: 0 },
+      gstBill: true,
+      gstBuyer,
+    };
+    expect(buildPaytmPosRequestPayload(common)).toMatchObject({ gstBill: true, gstBuyer });
+    expect(
+      buildPosCheckoutPayload({
+        ...common,
+        payment: "Cash",
+        splitPayments: { CASH: "", UPI: "", CARD: "", WALLET: "" },
+      }),
+    ).toMatchObject({ gstBill: true, gstBuyer });
+  });
 });

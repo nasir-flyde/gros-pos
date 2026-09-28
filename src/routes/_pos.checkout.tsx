@@ -21,6 +21,8 @@ import {
 import { getErrorMessage } from "@/lib/pos-page-state";
 import { formatINR } from "@/lib/utils";
 import { formatWeight } from "@/lib/weight";
+import { emptyGstBuyer, validateGstBuyer, type GstBuyer } from "@/lib/gst-billing";
+import { GstBillForm } from "@/components/gst-bill-form";
 import { getMarkdownErrorMessage, markdownApi } from "@/lib/markdown-api";
 import {
   Banknote,
@@ -71,7 +73,13 @@ function CheckoutPage() {
   const scopes = useAuthStore((s) => s.scopes);
   const [payment, setPayment] = useState<CheckoutPaymentId>("UPI");
   const [homeDelivery, setHomeDelivery] = useState(false);
+  const [gstBill, setGstBill] = useState(false);
+  const [gstBuyer, setGstBuyer] = useState<GstBuyer>(emptyGstBuyer);
   const [discountPct, setDiscountPct] = useState(0);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCouponCode, setAppliedCouponCode] = useState("");
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponApplying, setCouponApplying] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [paytmPaymentId, setPaytmPaymentId] = useState<string | null>(null);
   const [paytmState, setPaytmState] = useState<"idle" | "waiting" | "stopped" | "failed">("idle");
@@ -98,7 +106,8 @@ function CheckoutPage() {
     if (!hasMarkdown) return;
     if (homeDelivery) setHomeDelivery(false);
     if (discountPct) setDiscountPct(0);
-  }, [discountPct, hasMarkdown, homeDelivery]);
+    if (appliedCouponCode) setAppliedCouponCode("");
+  }, [appliedCouponCode, discountPct, hasMarkdown, homeDelivery]);
 
   const {
     deliveryFee,
@@ -150,10 +159,45 @@ function CheckoutPage() {
       discountPercent: !hasMarkdown && extraDiscount > 0 ? discountPct : undefined,
     },
     customerId: customer?._id,
+    gstBill,
+    gstBuyer: gstBill ? gstBuyer : undefined,
+    couponCode: appliedCouponCode || undefined,
     orderId: activeOrderId ?? undefined,
   });
 
-  const quoteRequest = buildPaytmPosRequestPayload(buildCommonCheckoutArgs());
+  const applyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    setCouponError(null);
+    if (!code) {
+      setCouponError("Enter a coupon code.");
+      return;
+    }
+    if (hasMarkdown) {
+      setCouponError("Coupons are unavailable with markdown-labelled stock.");
+      return;
+    }
+    setCouponApplying(true);
+    try {
+      await orderApi.quoteCheckout(
+        buildPaytmPosRequestPayload({
+          ...buildCommonCheckoutArgs(),
+          gstBill: false,
+          couponCode: code,
+        }),
+      );
+      setCouponInput(code);
+      setAppliedCouponCode(code);
+    } catch (error) {
+      setCouponError(getErrorMessage(error, "Coupon could not be applied."));
+    } finally {
+      setCouponApplying(false);
+    }
+  };
+
+  const quoteRequest = buildPaytmPosRequestPayload({
+    ...buildCommonCheckoutArgs(),
+    gstBill: false,
+  });
   const quoteRequestKey = JSON.stringify(quoteRequest);
   const [debouncedQuoteKey, setDebouncedQuoteKey] = useState(quoteRequestKey);
 
@@ -185,6 +229,11 @@ function CheckoutPage() {
   const quotedCatalogDiscount = Math.max(
     0,
     Number(quote?.totals.catalogDiscount ?? discount) - promotionDiscount,
+  );
+  const quotedManualDiscount = Math.max(
+    0,
+    Number(quote?.totals.manualDiscount ?? extraDiscount) -
+      Number(quote?.coupon?.discountAmount || 0),
   );
   const splitPaymentEntries: CheckoutPayment[] = buildSplitPaymentEntries(splitPayments);
   const splitPaymentTotal = splitPaymentEntries.reduce((sum, entry) => sum + entry.amount, 0);
@@ -244,6 +293,10 @@ function CheckoutPage() {
     mutationFn: async () => {
       setCheckoutError(null);
       if (noStore) throw new Error("No store assigned to your account. Contact admin.");
+      if (gstBill) {
+        const gstError = validateGstBuyer(gstBuyer);
+        if (gstError) throw new Error(gstError);
+      }
       if (payment === "Split" && !hasValidSplit) {
         throw new Error("Split payment amounts must add up exactly to the grand total.");
       }
@@ -291,6 +344,10 @@ function CheckoutPage() {
     mutationFn: async () => {
       setCheckoutError(null);
       if (noStore) throw new Error("No store assigned to your account. Contact admin.");
+      if (gstBill) {
+        const gstError = validateGstBuyer(gstBuyer);
+        if (gstError) throw new Error(gstError);
+      }
       if (quoteUnavailable || !quote) {
         throw new Error("Unable to confirm current price. Refresh the quote and try again.");
       }
@@ -370,6 +427,7 @@ function CheckoutPage() {
   const paytmRequestActive = paytmState === "waiting" || paytmState === "stopped";
   const submitDisabled =
     noStore ||
+    couponApplying ||
     quoteUnavailable ||
     isCheckoutSubmitDisabled({
       isSubmitting,
@@ -485,6 +543,110 @@ function CheckoutPage() {
                 </div>
               </label>
             )}
+          </Section>
+
+          <Section title="Billing">
+            <label className="flex items-center gap-3 rounded-xl border-2 bg-card p-4 font-extrabold">
+              <input
+                type="checkbox"
+                aria-label="GST Bill"
+                checked={gstBill}
+                disabled={paytmRequestActive}
+                onChange={(event) => setGstBill(event.target.checked)}
+                className="h-5 w-5"
+              />
+              GST Bill
+            </label>
+            {gstBill ? (
+              <GstBillForm buyer={gstBuyer} onChange={setGstBuyer} disabled={paytmRequestActive} />
+            ) : null}
+          </Section>
+
+          <Section title="Coupon">
+            <div className="rounded-xl border-2 bg-card p-4">
+              <label htmlFor="pos-coupon-code" className="text-sm font-bold">
+                Coupon code
+              </label>
+              <div className="mt-2 flex gap-2">
+                <input
+                  id="pos-coupon-code"
+                  type="text"
+                  value={couponInput}
+                  maxLength={50}
+                  autoComplete="off"
+                  disabled={hasMarkdown || paytmRequestActive || couponApplying}
+                  onChange={(event) => {
+                    setCouponInput(event.target.value.toUpperCase());
+                    setCouponError(null);
+                    if (appliedCouponCode) setAppliedCouponCode("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void applyCoupon();
+                    }
+                  }}
+                  placeholder="Enter coupon code"
+                  className="min-w-0 flex-1 rounded-lg border-2 bg-background px-3 py-2 font-bold uppercase focus:border-[var(--brand-blue)] focus:outline-none disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => void applyCoupon()}
+                  disabled={
+                    !couponInput.trim() ||
+                    noStore ||
+                    hasMarkdown ||
+                    paytmRequestActive ||
+                    couponApplying ||
+                    quoteUnavailable
+                  }
+                  className="rounded-lg bg-[var(--brand-blue)] px-4 py-2 font-extrabold text-white disabled:opacity-50"
+                >
+                  {couponApplying ? "Checking…" : "Apply"}
+                </button>
+                {appliedCouponCode ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppliedCouponCode("");
+                      setCouponInput("");
+                      setCouponError(null);
+                    }}
+                    disabled={paytmRequestActive}
+                    className="rounded-lg border-2 px-3 py-2 font-bold disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+              {hasMarkdown ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Coupons are unavailable with markdown-labelled stock.
+                </p>
+              ) : null}
+              {couponError ? (
+                <p role="alert" className="mt-2 text-sm font-semibold text-[var(--brand-red)]">
+                  {couponError}
+                </p>
+              ) : null}
+              {appliedCouponCode && quoteIsCurrent && quote?.coupon ? (
+                <p className="mt-2 text-sm font-semibold text-[var(--brand-green)]">
+                  {quote.coupon.code} applied · {formatINR(quote.coupon.discountAmount)} off
+                </p>
+              ) : null}
+              {appliedCouponCode &&
+              quoteIsCurrent &&
+              quote?.couponDecision.status?.startsWith("SUPPRESSED") ? (
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                  {appliedCouponCode} is valid; the automatic offer gives a better total.
+                </p>
+              ) : null}
+              {appliedCouponCode && quoteQuery.isError ? (
+                <p role="alert" className="mt-2 text-sm font-semibold text-[var(--brand-red)]">
+                  {getErrorMessage(quoteQuery.error, "Coupon could not be applied.")}
+                </p>
+              ) : null}
+            </div>
           </Section>
 
           <Section title="Payment Method">
@@ -708,10 +870,17 @@ function CheckoutPage() {
                   positive
                 />
               ))}
-              {Number(quote?.totals.manualDiscount ?? extraDiscount) > 0 && (
+              {quote?.coupon ? (
+                <SumRow
+                  label={`Coupon ${quote.coupon.code}`}
+                  value={"– " + formatINR(quote.coupon.discountAmount)}
+                  positive
+                />
+              ) : null}
+              {quotedManualDiscount > 0 && (
                 <SumRow
                   label="Extra Discount"
-                  value={"– " + formatINR(quote?.totals.manualDiscount ?? extraDiscount)}
+                  value={"– " + formatINR(quotedManualDiscount)}
                   positive
                 />
               )}

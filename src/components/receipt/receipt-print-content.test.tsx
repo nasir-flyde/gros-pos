@@ -18,6 +18,8 @@ const receipt: NormalizedReceipt = {
       lineTotal: 255,
       cgst: 6.07,
       sgst: 6.07,
+      igst: 0,
+      netPrice: 121.43,
       hsnCode: "1001",
     },
   ],
@@ -42,7 +44,7 @@ const receipt: NormalizedReceipt = {
   grossAmount: 255,
   netSalesValue: 255,
   gstByRate: {
-    5: { taxable: 242.86, cgst: 6.07, sgst: 6.07 },
+    5: { taxable: 242.86, cgst: 6.07, sgst: 6.07, igst: 0 },
   },
   storeName: "CHHOTA BAZAAR",
   storePhone: "9999999999",
@@ -53,6 +55,8 @@ const receipt: NormalizedReceipt = {
   cinNumber: "U12345WB2024PTC000001",
   totalCgst: 6.07,
   totalSgst: 6.07,
+  totalIgst: 0,
+  gstBuyer: null,
   totalGst: 12.14,
   taxableValue: 242.86,
   paymentRef: "UPI12345",
@@ -60,6 +64,39 @@ const receipt: NormalizedReceipt = {
 };
 
 describe("ReceiptPrintContent", () => {
+  it("prints B2B buyer and interstate tax details from the saved receipt", () => {
+    render(
+      <ReceiptPrintContent
+        receipt={{
+          ...receipt,
+          gstBuyer: {
+            gstin: "23AFOPS4000B1ZZ",
+            pan: "AFOPS4000B",
+            name: "Charanjeet Singh",
+            flatDoorNo: "111",
+            streetLocality: "Maxi Road",
+            city: "Ujjain",
+            state: "Madhya Pradesh",
+            stateCode: "23",
+            stateName: "Madhya Pradesh",
+            pincode: "456010",
+            taxType: "INTER",
+          },
+          itemsWithGst: [{ ...receipt.itemsWithGst[0], igst: 12.14, cgst: 0, sgst: 0 }],
+          totalIgst: 12.14,
+          totalCgst: 0,
+          totalSgst: 0,
+          gstByRate: { 5: { taxable: 242.86, cgst: 0, sgst: 0, igst: 12.14 } },
+        }}
+      />,
+    );
+    expect(screen.getByText("Original for Recipient")).toBeInTheDocument();
+    expect(screen.getByText(/PAN: AFOPS4000B/)).toBeInTheDocument();
+    expect(screen.getByText("HSN Code")).toBeInTheDocument();
+    expect(screen.getByText("1001")).toBeInTheDocument();
+    expect(screen.getByText(/IGST @ 5.00%/)).toBeInTheDocument();
+    expect(screen.getByText("Gross Sales Value")).toBeInTheDocument();
+  });
   it("renders weighted quantity in grams and identifies the per-KG rate", () => {
     render(
       <ReceiptPrintContent
@@ -91,7 +128,6 @@ describe("ReceiptPrintContent", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("₹127.50")).toBeInTheDocument();
     expect(screen.getAllByText("₹255.00").length).toBeGreaterThan(0);
-    expect(screen.queryByText("HSN")).not.toBeInTheDocument();
-    expect(screen.queryByText("1001")).not.toBeInTheDocument();
+    expect(screen.getByText("HSN Code: 1001")).toBeInTheDocument();
   });
 });
