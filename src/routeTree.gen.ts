@@ -24,6 +24,7 @@ import { Route as PosPurchaseRequestRouteImport } from './routes/_pos.purchase-r
 import { Route as PosPackBreakdownRouteImport } from './routes/_pos.pack-breakdown'
 import { Route as PosOrdersRouteImport } from './routes/_pos.orders'
 import { Route as PosNewOrderRouteImport } from './routes/_pos.new-order'
+import { Route as PosMarkdownDamageRouteImport } from './routes/_pos.markdown-damage'
 import { Route as PosInventoryRouteImport } from './routes/_pos.inventory'
 import { Route as PosHoldRouteImport } from './routes/_pos.hold'
 import { Route as PosDeliveryRouteImport } from './routes/_pos.delivery'
@@ -106,6 +107,11 @@ const PosNewOrderRoute = PosNewOrderRouteImport.update({
   path: '/new-order',
   getParentRoute: () => PosRoute,
 } as any)
+const PosMarkdownDamageRoute = PosMarkdownDamageRouteImport.update({
+  id: '/markdown-damage',
+  path: '/markdown-damage',
+  getParentRoute: () => PosRoute,
+} as any)
 const PosInventoryRoute = PosInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -152,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/delivery': typeof PosDeliveryRoute
   '/hold': typeof PosHoldRoute
   '/inventory': typeof PosInventoryRoute
+  '/markdown-damage': typeof PosMarkdownDamageRoute
   '/new-order': typeof PosNewOrderRoute
   '/orders': typeof PosOrdersRoute
   '/pack-breakdown': typeof PosPackBreakdownRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/delivery': typeof PosDeliveryRoute
   '/hold': typeof PosHoldRoute
   '/inventory': typeof PosInventoryRoute
+  '/markdown-damage': typeof PosMarkdownDamageRoute
   '/new-order': typeof PosNewOrderRoute
   '/orders': typeof PosOrdersRoute
   '/pack-breakdown': typeof PosPackBreakdownRoute
@@ -199,6 +207,7 @@ export interface FileRoutesById {
   '/_pos/delivery': typeof PosDeliveryRoute
   '/_pos/hold': typeof PosHoldRoute
   '/_pos/inventory': typeof PosInventoryRoute
+  '/_pos/markdown-damage': typeof PosMarkdownDamageRoute
   '/_pos/new-order': typeof PosNewOrderRoute
   '/_pos/orders': typeof PosOrdersRoute
   '/_pos/pack-breakdown': typeof PosPackBreakdownRoute
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/delivery'
     | '/hold'
     | '/inventory'
+    | '/markdown-damage'
     | '/new-order'
     | '/orders'
     | '/pack-breakdown'
@@ -247,6 +257,7 @@ export interface FileRouteTypes {
     | '/delivery'
     | '/hold'
     | '/inventory'
+    | '/markdown-damage'
     | '/new-order'
     | '/orders'
     | '/pack-breakdown'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/_pos/delivery'
     | '/_pos/hold'
     | '/_pos/inventory'
+    | '/_pos/markdown-damage'
     | '/_pos/new-order'
     | '/_pos/orders'
     | '/_pos/pack-breakdown'
@@ -399,6 +411,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PosNewOrderRouteImport
       parentRoute: typeof PosRoute
     }
+    '/_pos/markdown-damage': {
+      id: '/_pos/markdown-damage'
+      path: '/markdown-damage'
+      fullPath: '/markdown-damage'
+      preLoaderRoute: typeof PosMarkdownDamageRouteImport
+      parentRoute: typeof PosRoute
+    }
     '/_pos/inventory': {
       id: '/_pos/inventory'
       path: '/inventory'
@@ -470,6 +489,7 @@ interface PosRouteChildren {
   PosDeliveryRoute: typeof PosDeliveryRoute
   PosHoldRoute: typeof PosHoldRoute
   PosInventoryRoute: typeof PosInventoryRoute
+  PosMarkdownDamageRoute: typeof PosMarkdownDamageRoute
   PosNewOrderRoute: typeof PosNewOrderRoute
   PosOrdersRoute: typeof PosOrdersRoute
   PosPackBreakdownRoute: typeof PosPackBreakdownRoute
@@ -491,6 +511,7 @@ const PosRouteChildren: PosRouteChildren = {
   PosDeliveryRoute: PosDeliveryRoute,
   PosHoldRoute: PosHoldRoute,
   PosInventoryRoute: PosInventoryRoute,
+  PosMarkdownDamageRoute: PosMarkdownDamageRoute,
   PosNewOrderRoute: PosNewOrderRoute,
   PosOrdersRoute: PosOrdersRoute,
   PosPackBreakdownRoute: PosPackBreakdownRoute,

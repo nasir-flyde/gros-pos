@@ -48,4 +48,17 @@ export const reportApi = {
     link.click();
     URL.revokeObjectURL(url);
   },
+
+  async downloadB2BGstSales(params: { storeId: string; month: string }) {
+    const csv = await api.get<unknown, Blob>("/reports/b2b-gst-sales/export", {
+      params,
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(csv);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `b2b-gst-sales-${params.month}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
 };

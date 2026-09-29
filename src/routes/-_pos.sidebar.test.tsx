@@ -60,4 +60,12 @@ describe("POS sidebar SEL access", () => {
 
     expect(screen.getByRole("link", { name: /sel printing/i })).toBeInTheDocument();
   });
+
+  it("always shows the Markdown portal entry", () => {
+    render(<SideNav />);
+    expect(screen.getByRole("link", { name: /markdown/i })).toHaveAttribute(
+      "href",
+      "/markdown-damage",
+    );
+  });
 });

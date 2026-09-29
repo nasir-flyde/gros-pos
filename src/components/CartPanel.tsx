@@ -15,6 +15,7 @@ export function CartPanel() {
     dec,
     remove,
     setQuantity,
+    applyMarkdown,
     subtotal,
     discount,
     afterDisc,
@@ -113,6 +114,27 @@ export function CartPanel() {
                           ? `${formatWeight(i.product.quantityAvailable)} available`
                           : `${i.product.quantityAvailable} available`}
                       </div>
+                    ) : null}
+                    {i.product.markdownOption ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const result = applyMarkdown(i.product.lineKey || i.product._id);
+                          if (!result.success) {
+                            toast.error(result.error);
+                            return;
+                          }
+                          toast.success(
+                            `Markdown price ${formatINR(i.product.markdownOption!.effectivePrice)} applied`,
+                          );
+                        }}
+                        className="mt-2 w-full rounded-lg border border-[var(--brand-orange)] bg-[var(--brand-orange)]/10 px-2 py-2 text-left text-xs font-extrabold text-[var(--brand-orange)] active:scale-[0.98]"
+                      >
+                        Apply Markdown · {formatINR(i.product.markdownOption.effectivePrice)}
+                        <span className="ml-1 font-semibold">
+                          ({i.product.markdownOption.remainingQuantity} left)
+                        </span>
+                      </button>
                     ) : null}
                     {i.product.sellingMode === "WEIGHT" ? (
                       <div className="mt-2 flex items-center gap-2">

@@ -77,8 +77,11 @@ function ScannerPage() {
     queryKey: ["barcode", barcodeInput, storeId],
     queryFn: async () => {
       if (!isMarkdownCode(barcodeInput)) {
-        const resolved = await productApi.getVariantByBarcode(barcodeInput, storeId);
-        return { variant: resolved.data, markdown: null };
+        const [resolved, markdownOption] = await Promise.all([
+          productApi.getVariantByBarcode(barcodeInput, storeId),
+          markdownApi.resolveBaseEan(storeId, barcodeInput),
+        ]);
+        return { variant: resolved.data, markdown: null, markdownOption: markdownOption.data };
       }
       if (activeOrderId) throw new Error("Markdown stock cannot be added to a resumed held order.");
       const markdown = (await markdownApi.resolveLabel(storeId, barcodeInput)).data;
@@ -87,7 +90,7 @@ function ScannerPage() {
       if (variants[0].sellingMode === "WEIGHT") {
         throw new Error("Markdown labels for manually weighed products are not supported yet.");
       }
-      return { variant: variants[0], markdown };
+      return { variant: variants[0], markdown, markdownOption: null };
     },
     enabled: hasLookupBarcode,
     retry: false,
@@ -98,6 +101,7 @@ function ScannerPage() {
 
   const lookupResult = hasLookupBarcode ? variant : undefined;
   const scannedMarkdown = lookupResult?.markdown ?? null;
+  const availableMarkdown = lookupResult?.markdownOption ?? null;
   const scannedVariant = useMemo(
     () =>
       lookupResult?.variant
@@ -260,7 +264,10 @@ function ScannerPage() {
       }
       const p = scannedMarkdown
         ? buildMarkdownCartProduct(scannedVariant, scannedMarkdown)
-        : buildScannedCartProduct(scannedVariant);
+        : {
+            ...buildScannedCartProduct(scannedVariant),
+            markdownOption: availableMarkdown ?? undefined,
+          };
       const added = add(p, quantity, enteredQuantity);
       if (!added) {
         toast.error(`Only ${scannedVariant.quantityAvailable ?? 0} available`);
@@ -269,7 +276,14 @@ function ScannerPage() {
       setBarcodeInput("");
       return true;
     },
-    [add, scannedMarkdown, scannedVariant, scannerCartState.canAdd, scannerCartState.message],
+    [
+      add,
+      availableMarkdown,
+      scannedMarkdown,
+      scannedVariant,
+      scannerCartState.canAdd,
+      scannerCartState.message,
+    ],
   );
 
   // ── Auto-add to cart on successful scan ──────────────────────────────
