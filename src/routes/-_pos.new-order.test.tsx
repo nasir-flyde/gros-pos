@@ -1,10 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PosJoinedVariant } from "@/lib/product-api";
 
 const addMock = vi.fn();
 const refetchMock = vi.fn();
+const { resolveBaseEanMock } = vi.hoisted(() => ({
+  resolveBaseEanMock: vi.fn(),
+}));
 
 let catalogState = {
   data: {
@@ -32,6 +35,17 @@ vi.mock("@/lib/cart-context", () => ({
 vi.mock("@/components/CartPanel", () => ({
   CartPanel: () => <aside data-testid="cart-panel" />,
 }));
+
+vi.mock("@/lib/markdown-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/markdown-api")>();
+  return {
+    ...actual,
+    markdownApi: {
+      ...actual.markdownApi,
+      resolveBaseEan: resolveBaseEanMock,
+    },
+  };
+});
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
@@ -102,6 +116,7 @@ describe("New Order production states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     addMock.mockReturnValue(true);
+    resolveBaseEanMock.mockResolvedValue({ data: null });
     cartItems = [];
     catalogState = {
       data: {
@@ -125,6 +140,33 @@ describe("New Order production states", () => {
 
     expect(screen.queryByRole("button", { name: /add atta 5kg/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add basmati rice 1kg/i })).toBeInTheDocument();
+  });
+
+  it("checks a searched product for markdown and offers it in the cart", async () => {
+    const markdownOption = {
+      markdownCode: "BATCH-MKD-123456789ABC",
+      productVariantId: "variant-2",
+      batchId: "batch-1",
+      batchNumber: "B-001",
+      expiryDate: "2026-09-30T23:59:59.999Z",
+      basePrice: 299,
+      effectivePrice: 130,
+      remainingQuantity: 2,
+    };
+    resolveBaseEanMock.mockResolvedValue({ data: markdownOption });
+    render(<NewOrderPage />);
+
+    fireEvent.change(screen.getByPlaceholderText(/search product/i), {
+      target: { value: "rice" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add basmati rice 1kg/i }));
+
+    await waitFor(() =>
+      expect(addMock).toHaveBeenCalledWith(
+        expect.objectContaining({ _id: "variant-2", markdownOption }),
+      ),
+    );
+    expect(resolveBaseEanMock).toHaveBeenCalledWith("store-1", "890200");
   });
 
   it("opens weight entry and adds normalized KG for a weighted product", () => {

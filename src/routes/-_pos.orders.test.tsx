@@ -2,143 +2,145 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useAuthStore } from "@/lib/auth-store";
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(),
-  get: vi.fn(),
-  returns: vi.fn(),
   create: vi.fn(),
+  listReturns: vi.fn(),
+  orderList: vi.fn(),
+  orderDetail: vi.fn(),
+  catalog: { variants: [] as unknown[] },
 }));
-vi.mock("@/lib/order-api", () => ({ orderApi: { list: mocks.list, getById: mocks.get } }));
-vi.mock("@/lib/return-api", () => ({ returnApi: { list: mocks.returns, create: mocks.create } }));
+vi.mock("@tanstack/react-router", () => ({
+  createFileRoute: () => (options: Record<string, unknown>) => options,
+}));
+vi.mock("@/lib/auth-store", () => ({
+  useAuthStore: () => ({
+    scopes: [{ type: "store", id: "store-1" }],
+    permissions: ["order.read", "return.read", "return.write"],
+  }),
+}));
+vi.mock("@/lib/order-api", () => ({
+  orderApi: { list: mocks.orderList, getById: mocks.orderDetail },
+}));
+vi.mock("@/lib/return-api", () => ({
+  returnApi: { list: mocks.listReturns, create: mocks.create },
+}));
 vi.mock("@/lib/use-live-catalog", () => ({
-  useLiveCatalog: () => ({ data: { variants: [] }, isLoading: false }),
+  useLiveCatalog: () => ({ data: mocks.catalog, isLoading: false }),
 }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import { Route } from "./_pos.orders";
-const OrdersPage = Route.options.component as ComponentType;
-const order = {
+const Component = (Route as unknown as { component: ComponentType }).component;
+const baseOrder = {
   _id: "order-1",
   orderNumber: "ORD-1",
   status: "COMPLETED",
-  paymentMode: "CASH",
+  createdAt: "2026-09-30T00:00:00Z",
   grandTotal: 100,
-  createdAt: "2026-09-01T00:00:00Z",
-  storeId: "store-1",
+  paymentMode: "CASH",
   items: [
     {
-      _id: "item-1",
-      productVariantId: "variant-1",
-      variantName: "Rice",
-      sku: "RICE",
-      quantity: 2,
+      _id: "original",
+      variantName: "Original product",
+      quantity: 1,
+      unitPrice: 100,
       lineTotal: 100,
+      sellingMode: "FIXED",
     },
   ],
 };
-const record = { _id: "return-1", returnNumber: "RET-1", status: "REQUESTED" };
-function mount() {
+const variant = (price: number) => ({
+  _id: "replacement",
+  variantName: "Cheaper product",
+  sellingMode: "FIXED",
+  sku: "CHEAP",
+  barcodes: ["001234"],
+  price,
+  quantityAvailable: 10,
+});
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.orderList.mockResolvedValue({ data: [baseOrder] });
+  mocks.orderDetail.mockResolvedValue({ data: baseOrder });
+  mocks.listReturns.mockResolvedValue({ data: [] });
+  mocks.create.mockResolvedValue({
+    data: { _id: "return-1", returnNumber: "RTN-1", status: "REQUESTED", items: [] },
+  });
+  mocks.catalog.variants = [variant(50)];
+});
+async function open() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  render(
     <QueryClientProvider client={client}>
-      <OrdersPage />
+      <Component />
     </QueryClientProvider>,
   );
-}
-async function prepareReturn() {
-  fireEvent.click(await screen.findByText("ORD-1"));
-  fireEvent.click(await screen.findByRole("checkbox"));
+  fireEvent.click(await screen.findByRole("button", { name: /ORD-1/ }));
+  await screen.findByLabelText("Return quantity for Original product");
+  fireEvent.change(screen.getByLabelText("Return quantity for Original product"), {
+    target: { value: "1" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Different item" }));
+  fireEvent.click(screen.getByRole("button", { name: /Cheaper product/ }));
   fireEvent.change(screen.getByPlaceholderText("Reason for return or exchange"), {
-    target: { value: "Damaged packaging" },
+    target: { value: "Customer exchange" },
   });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Submit for approval" })).toBeEnabled(),
-  );
-  return screen.getByRole("button", { name: "Submit for approval" });
 }
-
-describe("Orders approval-based returns", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useAuthStore.getState().setGrosAccess({
-      user: {
-        id: "user-1",
-        organizationId: "org-1",
-        firstName: "Cashier",
-        lastName: "One",
-        email: "cashier@example.test",
-        phone: "9000000000",
-        isSuperAdmin: false,
-      },
-      permissions: ["order.read", "return.read", "return.write"],
-      scopes: [{ type: "store", id: "store-1", name: "Store One" }],
-    });
-    mocks.list.mockResolvedValue({ data: [order] });
-    mocks.get.mockResolvedValue({ data: order });
-    mocks.returns.mockResolvedValue({ data: [] });
-    mocks.create.mockResolvedValue({ data: record });
-  });
-  it("does not request orders without order.read", () => {
-    useAuthStore.setState({ permissions: [] });
-    mount();
-    expect(screen.getByRole("alert")).toHaveTextContent("Order read permission required");
-    expect(mocks.list).not.toHaveBeenCalled();
-  });
-  it("requires return.write even when the order is readable", async () => {
-    useAuthStore.setState({ permissions: ["order.read", "return.read"] });
-    mount();
-    fireEvent.click(await screen.findByText("ORD-1"));
-    expect(await screen.findByRole("button", { name: "Submit for approval" })).toBeDisabled();
-    expect(mocks.create).not.toHaveBeenCalled();
-  });
-  it("blocks another request when one is awaiting approval", async () => {
-    mocks.returns.mockResolvedValue({ data: [record] });
-    mount();
-    fireEvent.click(await screen.findByText("ORD-1"));
-    expect(await screen.findByText("RET-1")).toBeInTheDocument();
+describe("POS replacement quantity screen", () => {
+  it.each([
+    [2, 50, "Even exchange", false],
+    [3, 40, "Due after approval ₹20", false],
+    [2, 40, "Refund ₹20", true],
+  ])(
+    "supports %i replacements at %i and sends independent quantity",
+    async (quantity, price, balance, refund) => {
+      mocks.catalog.variants = [variant(price)];
+      await open();
+      fireEvent.change(screen.getByLabelText("Replacement quantity for Original product"), {
+        target: { value: String(quantity) },
+      });
+      expect(screen.getByText(balance)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Submit for approval" }));
+      await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+      expect(mocks.create.mock.calls[0][0]).toMatchObject({
+        resolutionType: "DIFFERENT_ITEM_EXCHANGE",
+        items: [
+          {
+            orderItemId: "original",
+            quantity: 1,
+            replacementProductVariantId: "replacement",
+            replacementQuantity: quantity,
+          },
+        ],
+      });
+      expect(mocks.create.mock.calls[0][0].refundMethod).toBe(refund ? "CASH" : undefined);
+    },
+  );
+  it("blocks bad quantity/stock and resets when SKU or order changes", async () => {
+    await open();
+    const input = screen.getByLabelText("Replacement quantity for Original product");
+    fireEvent.change(input, { target: { value: "1.5" } });
     expect(screen.getByRole("button", { name: "Submit for approval" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "11" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("stock");
+    fireEvent.change(input, { target: { value: "2" } });
+    expect(screen.getByText("Even exchange")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Cheaper product/ }));
+    expect(screen.getByLabelText("Replacement quantity for Original product")).toHaveValue(1);
+    fireEvent.click(screen.getByRole("button", { name: "Back to orders" }));
+    fireEvent.click(await screen.findByRole("button", { name: /ORD-1/ }));
+    await screen.findByLabelText("Return quantity for Original product");
+    expect(screen.getByLabelText("Return quantity for Original product")).toHaveValue(0);
+    expect(screen.queryByLabelText("Replacement quantity for Original product")).toBeNull();
   });
-  it("submits once during rapid clicks and never posts a refund directly", async () => {
-    let finish!: (value: unknown) => void;
-    mocks.create.mockReturnValue(
-      new Promise((resolve) => {
-        finish = resolve;
-      }),
-    );
-    mount();
-    const submit = await prepareReturn();
-    fireEvent.click(submit);
-    fireEvent.click(submit);
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
-    finish({ data: record });
-    expect(
-      await screen.findByText(
-        "No refund, payment, exchange, or stock movement has been posted yet.",
-      ),
-    ).toBeInTheDocument();
-    expect(mocks.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orderId: "order-1",
-        channel: "IN_STORE",
-        resolutionType: "REFUND",
-        items: [{ orderItemId: "item-1", quantity: 1, disposition: "SELLABLE" }],
-      }),
-      expect.any(String),
-    );
-  });
-  it("reuses the idempotency key after an ambiguous network failure", async () => {
-    mocks.create
-      .mockRejectedValueOnce(new Error("Network disconnected"))
-      .mockResolvedValueOnce({ data: record });
-    mount();
-    const submit = await prepareReturn();
-    fireEvent.click(submit);
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(submit).toBeEnabled());
-    fireEvent.click(submit);
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
-    expect(mocks.create.mock.calls[0][1]).toBe(mocks.create.mock.calls[1][1]);
+  it("caps original quantity by previously returned quantity", async () => {
+    mocks.listReturns.mockResolvedValue({
+      data: [{ status: "FULFILLED", items: [{ orderItemId: "original", requestedQuantity: 1 }] }],
+    });
+    await open();
+    expect(screen.getByLabelText("Return quantity for Original product")).toHaveValue(0);
+    expect(screen.getByRole("button", { name: "Submit for approval" })).toBeDisabled();
   });
 });

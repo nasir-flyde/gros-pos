@@ -3,6 +3,8 @@ import { getApiAuthToken } from "@/lib/api";
 import { runtimeConfig } from "@/lib/runtime-config";
 import { readCatalogCache, writeCatalogCache } from "@/lib/catalog-cache";
 
+import { posMaintenanceAccess, isPosAccessError } from "./pos-maintenance";
+
 export interface PosCategory {
   _id: string;
   categoryCode: string;
@@ -176,8 +178,13 @@ function isNotFoundError(error: unknown): boolean {
 }
 
 export function getEffectiveVariantPrice(
-  variant: Pick<PosVariant, "finalPrice" | "sellingPrice" | "pricePerUnit" | "mrp">,
+  variant: Pick<PosVariant, "finalPrice" | "sellingPrice" | "pricePerUnit" | "mrp"> &
+    Partial<Pick<PosVariant, "sellingMode">>,
 ): number {
+  // Match /pos/catalog: loose goods use the saved per-KG rate, not store package pricing.
+  if (variant.sellingMode === "WEIGHT") {
+    return variant.pricePerUnit ?? variant.mrp ?? 0;
+  }
   return variant.finalPrice ?? variant.sellingPrice ?? variant.pricePerUnit ?? variant.mrp ?? 0;
 }
 
@@ -321,20 +328,31 @@ export const productApi = {
     const fastCatalogEnabled = import.meta.env.VITE_POS_FAST_CATALOG !== "false";
     if (fastCatalogEnabled && params?.storeId) {
       const organizationId = params.organizationId || "current";
-      const cached = await readCatalogCache(organizationId, params.storeId);
+      const lease = posMaintenanceAccess.acquireRequest();
+      let cached: Awaited<ReturnType<typeof readCatalogCache>> = null;
       try {
+        cached = await readCatalogCache(organizationId, params.storeId);
+        if (lease.signal.aborted) throw { code: "REQUEST_CANCELLED" };
         const token = await getApiAuthToken();
+        posMaintenanceAccess.assertPosAccess();
+        if (lease.signal.aborted) throw { code: "REQUEST_CANCELLED" };
         const url = new URL(`${runtimeConfig.apiUrl}/pos/catalog`);
         url.searchParams.set("storeId", params.storeId);
         const response = await fetch(url, {
+          signal: lease.signal,
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...(cached?.etag ? { "If-None-Match": cached.etag } : {}),
           },
         });
+        posMaintenanceAccess.assertPosAccess();
+        if (lease.signal.aborted) throw { code: "REQUEST_CANCELLED" };
         if (response.status === 304 && cached) return cached.data;
         if (!response.ok) {
+          const failure = await response.json().catch(() => ({}));
+          if (failure?.code === "POS_PAUSED") posMaintenanceAccess.receivePausedResponse();
           throw {
+            ...failure,
             status: response.status,
             message: `POS catalog request failed (${response.status})`,
           };
@@ -349,14 +367,21 @@ export const productApi = {
         if (!data || !Array.isArray(data.variants) || !Array.isArray(data.categories)) {
           throw new Error("POS catalog returned an invalid response");
         }
-        await writeCatalogCache({
-          organizationId,
-          storeId: params.storeId,
-          etag: response.headers.get("etag") || undefined,
-          data,
-        });
+        posMaintenanceAccess.assertPosAccess();
+        if (lease.signal.aborted) throw { code: "REQUEST_CANCELLED" };
+        await writeCatalogCache(
+          {
+            organizationId,
+            storeId: params.storeId,
+            etag: response.headers.get("etag") || undefined,
+            data,
+          },
+          lease.signal,
+        );
         return data;
       } catch (error) {
+        if (lease.signal.aborted || isPosAccessError(error)) throw error;
+        posMaintenanceAccess.assertPosAccess();
         const status =
           typeof error === "object" && error && "status" in error
             ? Number(error.status)
@@ -367,6 +392,8 @@ export const productApi = {
         if (status !== 404 || import.meta.env.VITE_POS_FAST_CATALOG_FALLBACK === "false") {
           throw error;
         }
+      } finally {
+        lease.release();
       }
     }
 

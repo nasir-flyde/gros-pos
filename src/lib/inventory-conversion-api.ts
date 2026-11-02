@@ -1,12 +1,7 @@
 import { api } from "@/lib/api";
 
 export type ConversionStatus =
-  | "DRAFT"
-  | "SUBMITTED"
-  | "POSTED"
-  | "REJECTED"
-  | "CANCELLED"
-  | "REVERSED";
+  "DRAFT" | "SUBMITTED" | "POSTED" | "REJECTED" | "CANCELLED" | "REVERSED";
 
 export interface ConversionStore {
   _id: string;

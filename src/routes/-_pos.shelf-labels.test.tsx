@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     ],
   },
   createBatch: vi.fn(),
+  toastError: vi.fn(),
   pdf: vi.fn(),
   invalidateQueries: vi.fn(),
   stores: [
@@ -19,6 +20,8 @@ const mocks = vi.hoisted(() => ({
     { _id: "store-2", storeName: "Second Store", storeCode: "SECOND" },
   ],
 }));
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: mocks.toastError } }));
 
 vi.mock("@/lib/auth-store", () => ({
   useAuthStore: (selector: (state: unknown) => unknown) => selector(mocks.auth),
@@ -93,8 +96,20 @@ vi.mock("@tanstack/react-query", () => ({
               printable: true,
               errors: [],
             },
+            {
+              productVariantId: "variant-2",
+              productName: "Rice",
+              variantName: "1 kg",
+              sku: "RICE-1",
+              primaryBarcode: "8901234567891",
+              regularPrice: 70,
+              effectivePrice: 65,
+              reasons: [],
+              printable: true,
+              errors: [],
+            },
           ],
-          meta: { page: 1, limit: 25, totalDocs: 1, totalPages: 1 },
+          meta: { page: 1, limit: 25, totalDocs: 1, totalPages: 2 },
         },
         isLoading: false,
         isError: false,
@@ -166,7 +181,7 @@ describe("POS SEL Printing", () => {
 
     expect(screen.getByText("Labelled Atta")).toBeInTheDocument();
     expect(screen.getByLabelText("Select ATTA-5")).toBeDisabled();
-    expect(screen.getByRole("button", { name: /generate preview/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /print cart/i })).toBeDisabled();
   });
 
   it("selects a product, clamps copies to 500, and creates a scoped batch", async () => {
@@ -194,7 +209,7 @@ describe("POS SEL Printing", () => {
     fireEvent.change(screen.getByLabelText("Assigned store"), { target: { value: "store-1" } });
     fireEvent.click(screen.getByLabelText("Select ATTA-5"));
     fireEvent.change(screen.getByLabelText("Copies for ATTA-5"), { target: { value: "999" } });
-    fireEvent.click(screen.getByRole("button", { name: /generate preview/i }));
+    fireEvent.click(screen.getByRole("button", { name: /print cart/i }));
 
     await waitFor(() =>
       expect(mocks.createBatch).toHaveBeenCalledWith({
@@ -203,5 +218,73 @@ describe("POS SEL Printing", () => {
         items: [{ productVariantId: "variant-1", quantity: 500 }],
       }),
     );
+  });
+  it("keeps multiple cart products through repeated searches, supports removal and clears on store change", () => {
+    mocks.auth.permissions = ["shelfLabel.print"];
+    render(<ShelfLabelPage />);
+    fireEvent.change(screen.getByLabelText("Assigned store"), { target: { value: "store-1" } });
+    expect(screen.getByRole("button", { name: /print cart/i })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("Select ATTA-5"));
+    fireEvent.click(screen.getByLabelText("Select RICE-1"));
+    fireEvent.change(screen.getByLabelText("Cart copies for ATTA-5"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(screen.getByLabelText("Suggestion reason"), {
+      target: { value: "PRICE_CHANGE" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(screen.getByLabelText("Cart copies for ATTA-5")).toHaveValue(2);
+    expect(screen.getByText("3 labels selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove RICE-1" }));
+    expect(screen.queryByLabelText("Cart copies for RICE-1")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Assigned store"), { target: { value: "store-2" } });
+    expect(screen.getByText("Your print cart is empty.")).toBeInTheDocument();
+  });
+
+  it("prints multiple products in one A4 batch and clears only after PDF success", async () => {
+    mocks.auth.permissions = ["shelfLabel.print"];
+    mocks.createBatch.mockResolvedValue({
+      data: { _id: "batch-2", batchNumber: "SEL-2", totalLabels: 3, layout: "A4_50X30" },
+    });
+    mocks.pdf.mockResolvedValue(new Blob(["pdf"]));
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:labels"),
+      revokeObjectURL: vi.fn(),
+    });
+    render(<ShelfLabelPage />);
+    fireEvent.change(screen.getByLabelText("Assigned store"), { target: { value: "store-1" } });
+    fireEvent.click(screen.getByLabelText("Select ATTA-5"));
+    fireEvent.click(screen.getByLabelText("Select RICE-1"));
+    fireEvent.change(screen.getByLabelText("Cart copies for ATTA-5"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Print layout"), { target: { value: "A4_50X30" } });
+    fireEvent.click(screen.getByRole("button", { name: /print cart/i }));
+    await waitFor(() =>
+      expect(mocks.createBatch).toHaveBeenCalledWith({
+        storeId: "store-1",
+        layout: "A4_50X30",
+        items: [
+          { productVariantId: "variant-1", quantity: 2 },
+          { productVariantId: "variant-2", quantity: 1 },
+        ],
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("Your print cart is empty.")).toBeInTheDocument());
+  });
+
+  it("retains the cart and reports generation and PDF errors", async () => {
+    mocks.auth.permissions = ["shelfLabel.print"];
+    mocks.createBatch.mockRejectedValueOnce(new Error("Price unavailable"));
+    render(<ShelfLabelPage />);
+    fireEvent.change(screen.getByLabelText("Assigned store"), { target: { value: "store-1" } });
+    fireEvent.click(screen.getByLabelText("Select ATTA-5"));
+    fireEvent.click(screen.getByRole("button", { name: /print cart/i }));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("Price unavailable"));
+    expect(screen.getByLabelText("Cart copies for ATTA-5")).toHaveValue(1);
+    mocks.createBatch.mockResolvedValueOnce({ data: { _id: "batch-3" } });
+    mocks.pdf.mockRejectedValueOnce(new Error("PDF unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: /print cart/i }));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("PDF unavailable"));
+    expect(screen.getByLabelText("Cart copies for ATTA-5")).toHaveValue(1);
   });
 });

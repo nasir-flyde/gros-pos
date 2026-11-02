@@ -96,12 +96,7 @@ export interface PosOrder {
 
 export type DeliveryMode = "IN_HOUSE" | "THIRD_PARTY";
 export type DeliveryOrderStatus =
-  | "ASSIGNED"
-  | "PICKED_UP"
-  | "OUT_FOR_DELIVERY"
-  | "DELIVERED"
-  | "FAILED"
-  | "REATTEMPT_SCHEDULED";
+  "ASSIGNED" | "PICKED_UP" | "OUT_FOR_DELIVERY" | "DELIVERED" | "FAILED" | "REATTEMPT_SCHEDULED";
 
 export interface DeliveryAgentRef {
   _id: string;
@@ -168,6 +163,7 @@ export interface PosQuoteResult {
     discountPercent: number;
     delivery: number;
     grandTotal: number;
+    employeeDiscount?: number;
   };
   appliedOffers: Array<{
     promotionId: string;
@@ -175,8 +171,18 @@ export interface PosQuoteResult {
     promotionType?: string;
     discountAmount: number;
   }>;
-  coupon: Record<string, unknown> | null;
-  couponDecision: Record<string, unknown>;
+  coupon: { code: string; discountAmount: number } | null;
+  couponDecision: { status?: string; code?: string };
+  employeeDiscount?: {
+    employeeName?: string;
+    employeeCode?: string;
+    discountPercent: number;
+    amount: number;
+    limitedBy?: string | null;
+    monthlyCapAmount?: number | null;
+    monthlyRemaining?: number | null;
+  } | null;
+  employeeDecision?: { status?: string; amount?: number };
   quoteVersion: string | null;
 }
 

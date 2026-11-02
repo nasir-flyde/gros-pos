@@ -3,6 +3,7 @@ import { CartProvider } from "@/lib/cart-context";
 import { BrandIcon } from "@/components/brand-icon";
 import { StoreScopeGate } from "@/components/store-scope-gate";
 import {
+  BadgePercent,
   Bike,
   Clock,
   Home,
@@ -34,6 +35,7 @@ const NAV = [
   { to: "/orders", label: "Orders", icon: ReceiptText },
   { to: "/delivery", label: "Delivery", icon: Bike },
   { to: "/shelf-labels", label: "SEL Printing", icon: Printer, shelfLabelOnly: true },
+  { to: "/markdown-damage", label: "Markdown", icon: BadgePercent },
 ] as const;
 
 function PosLayout() {
@@ -175,9 +177,10 @@ export function SideNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const permissions = useAuthStore((state) => state.permissions);
   const isSuperAdmin = useAuthStore((state) => Boolean(state.user?.isSuperAdmin));
-  const visibleNav = NAV.filter(
-    (item) => !("shelfLabelOnly" in item) || canViewShelfLabels(permissions, isSuperAdmin),
-  );
+  const visibleNav = NAV.filter((item) => {
+    if ("shelfLabelOnly" in item) return canViewShelfLabels(permissions, isSuperAdmin);
+    return true;
+  });
   return (
     <nav className="flex w-[88px] shrink-0 flex-col gap-1.5 overflow-y-auto bg-[var(--surface)] py-3 shadow-[2px_0_0_var(--color-border)]">
       {visibleNav.map((n) => {

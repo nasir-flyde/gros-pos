@@ -1,13 +1,7 @@
 import { api } from "@/lib/api";
 
 export type MovementStatus =
-  | "DRAFT"
-  | "REQUESTED"
-  | "APPROVED"
-  | "DISPATCHED"
-  | "RECEIVED"
-  | "CANCELLED"
-  | "CLOSED";
+  "DRAFT" | "REQUESTED" | "APPROVED" | "DISPATCHED" | "RECEIVED" | "CANCELLED" | "CLOSED";
 
 export interface StockMovement {
   _id: string;

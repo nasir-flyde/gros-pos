@@ -25,6 +25,7 @@ export interface ShelfLabelCandidate {
   productCode?: string;
   sku?: string;
   variantName?: string;
+  sellingMode?: string;
   unitType?: string;
   unitValue?: number;
   primaryBarcode?: string | null;

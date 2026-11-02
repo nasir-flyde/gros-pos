@@ -1,8 +1,13 @@
+import type { GstBuyer } from "./gst-billing";
+
 export interface CheckoutPayload {
   orderId?: string;
   storeId: string;
   cashierId: string;
   customerId?: string;
+  gstBill?: boolean;
+  gstBuyer?: GstBuyer;
+  couponCode?: string;
   items: CheckoutLine[];
   payments: CheckoutPayment[];
   deliveryType?: "HOME" | "PICKUP" | "WALK_OUT";

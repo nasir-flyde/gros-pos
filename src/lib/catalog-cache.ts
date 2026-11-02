@@ -54,12 +54,14 @@ export async function readCatalogCache(organizationId: string, storeId: string) 
 
 export async function writeCatalogCache(
   entry: Omit<CachedPosCatalog, "schemaVersion" | "savedAt">,
+  signal?: AbortSignal,
 ) {
+  if (signal?.aborted) return;
   const value: CachedPosCatalog = { ...entry, schemaVersion: SCHEMA_VERSION, savedAt: Date.now() };
   const key = keyFor(entry.organizationId, entry.storeId);
   memoryCache.set(key, value);
   const db = await openDatabase();
-  if (!db) return;
+  if (!db || signal?.aborted) return;
   await new Promise<void>((resolve) => {
     const request = db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put(value, key);
     request.onsuccess = () => resolve();

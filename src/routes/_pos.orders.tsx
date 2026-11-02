@@ -1,3 +1,8 @@
+import {
+  getExchangePlan,
+  remainingReturnQuantity,
+  replacementQuantityFor,
+} from "@/lib/exchange-quantities";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -74,6 +79,7 @@ function OrdersPage() {
   const [dateTo, setDateTo] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [replacementQuantities, setReplacementQuantities] = useState<Record<string, string>>({});
   const [resolution, setResolution] = useState<ReturnResolution>("REFUND");
   const [refundMethod, setRefundMethod] = useState<RefundMethod>("CASH");
   const [disposition, setDisposition] = useState<ReturnDisposition>("SELLABLE");
@@ -116,19 +122,28 @@ function OrdersPage() {
   );
   const items = order?.items ?? [];
   const selectedItems = items.filter((item) => Number(quantities[item._id] || 0) > 0);
-  const returnedValue = selectedItems.reduce(
-    (sum, item) =>
-      sum + (Number(item.lineTotal || 0) / Number(item.quantity || 1)) * quantities[item._id],
-    0,
-  );
-  const selectedQuantity = selectedItems.reduce((sum, item) => sum + quantities[item._id], 0);
+  const exchangePlan = getExchangePlan(items, quantities, replacementQuantities, replacement);
+  const returnedValue = exchangePlan.returnedValue;
   const replacementValue =
     resolution === "DIFFERENT_ITEM_EXCHANGE"
-      ? Number(replacement?.price || 0) * selectedQuantity
+      ? exchangePlan.replacementValue
       : resolution === "SAME_ITEM_EXCHANGE"
         ? returnedValue
         : 0;
-  const priceDifference = replacementValue - returnedValue;
+  const priceDifference = Math.round((replacementValue - returnedValue) * 100) / 100;
+  const quantityError =
+    resolution === "DIFFERENT_ITEM_EXCHANGE"
+      ? exchangePlan.error
+      : getExchangePlan(items, quantities, {}, null).error;
+  const remainingQuantities = Object.fromEntries(
+    items.map((item) => [
+      item._id,
+      remainingReturnQuantity(item, orderReturnsQuery.data?.data ?? []),
+    ]),
+  );
+  const exceedsReturnable = selectedItems.some(
+    (item) => quantities[item._id] > remainingQuantities[item._id],
+  );
   const needsRefundMethod =
     resolution === "REFUND" || resolution === "STORE_CREDIT" || priceDifference < 0;
   const canSubmit = Boolean(
@@ -139,11 +154,13 @@ function OrdersPage() {
     orderReturnsQuery.isSuccess &&
     !pendingReturn &&
     !submittedReturn &&
+    !quantityError &&
+    !exceedsReturnable &&
     selectedItems.length &&
     reason.trim() &&
     (resolution !== "DIFFERENT_ITEM_EXCHANGE" || replacement) &&
     (!needsRefundMethod || refundMethod) &&
-    !(refundMethod === "STORE_CREDIT" && !order.customerId),
+    !(needsRefundMethod && refundMethod === "STORE_CREDIT" && !order.customerId),
   );
   const matchingReplacements = (catalogQuery.data?.variants ?? [])
     .filter((variant) => {
@@ -182,7 +199,9 @@ function OrdersPage() {
 
   const workflowMutation = useMutation({
     mutationFn: async () => {
-      if (!order || !canSubmit) throw new Error("Return access or valid selection required");
+      if (!order) throw new Error("Select an order");
+      if (!canSubmit)
+        throw new Error(quantityError || "Check the return and replacement quantities");
       if (pendingRef.current) throw new Error("Return submission already in progress");
       const payload: Parameters<typeof returnApi.create>[0] = {
         orderId: order._id,
@@ -203,7 +222,9 @@ function OrdersPage() {
           ...(resolution === "DIFFERENT_ITEM_EXCHANGE" && replacement
             ? {
                 replacementProductVariantId: replacement._id,
-                replacementQuantity: quantities[item._id],
+                replacementQuantity: exchangePlan.lines.find(
+                  (line) => line.orderItemId === item._id,
+                )!.replacementQuantity,
               }
             : {}),
         })),
@@ -236,6 +257,9 @@ function OrdersPage() {
   const selectOrder = (nextOrder: PosOrder) => {
     setSelectedOrderId(nextOrder._id);
     setQuantities({});
+    setReplacementQuantities({});
+    setResolution("REFUND");
+    setRefundMethod("CASH");
     setSubmittedReturn(null);
     setReplacement(null);
     setReplacementSearch("");
@@ -245,6 +269,9 @@ function OrdersPage() {
   const closeOrder = () => {
     setSelectedOrderId(null);
     setQuantities({});
+    setReplacementQuantities({});
+    setResolution("REFUND");
+    setRefundMethod("CASH");
     setSubmittedReturn(null);
     setReplacement(null);
     setReplacementSearch("");
@@ -468,6 +495,7 @@ function OrdersPage() {
             <div className="divide-y">
               {items.map((item) => {
                 const quantity = quantities[item._id] || 0;
+                const remaining = remainingQuantities[item._id] || 0;
                 return (
                   <div
                     key={item._id}
@@ -476,12 +504,19 @@ function OrdersPage() {
                     <input
                       type="checkbox"
                       checked={quantity > 0}
-                      onChange={(event) =>
+                      disabled={remaining <= 0}
+                      onChange={(event) => {
                         setQuantities((current) => ({
                           ...current,
-                          [item._id]: event.target.checked ? Math.min(1, item.quantity) : 0,
-                        }))
-                      }
+                          [item._id]: event.target.checked ? Math.min(1, remaining) : 0,
+                        }));
+                        if (!event.target.checked)
+                          setReplacementQuantities((current) => {
+                            const next = { ...current };
+                            delete next[item._id];
+                            return next;
+                          });
+                      }}
                       className="h-5 w-5"
                     />
                     <div>
@@ -497,22 +532,19 @@ function OrdersPage() {
                           (typeof item.productVariantId === "object"
                             ? item.productVariantId.sku
                             : "")}{" "}
-                        · Bought {item.quantity} · {inr(item.lineTotal)}
+                        · Bought {item.quantity} · Returnable {remaining} · {inr(item.lineTotal)}
                       </div>
                     </div>
                     <input
                       type="number"
                       min={0}
-                      max={item.quantity}
+                      max={remaining}
                       step={item.sellingMode === "WEIGHT" ? 0.001 : 1}
                       value={quantity}
                       onChange={(event) =>
                         setQuantities((current) => ({
                           ...current,
-                          [item._id]: Math.min(
-                            item.quantity,
-                            Math.max(0, Number(event.target.value)),
-                          ),
+                          [item._id]: Math.min(remaining, Math.max(0, Number(event.target.value))),
                         }))
                       }
                       aria-label={`Return quantity for ${itemName(item)}`}
@@ -560,6 +592,7 @@ function OrdersPage() {
                     type="button"
                     onClick={() => {
                       setResolution(value);
+                      setReplacementQuantities({});
                       if (value === "STORE_CREDIT") setRefundMethod("STORE_CREDIT");
                     }}
                     className={`flex min-h-12 items-center justify-center gap-2 rounded-md border-2 px-2 text-sm font-extrabold ${resolution === value ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/10" : "border-border"}`}
@@ -615,7 +648,10 @@ function OrdersPage() {
                       <button
                         key={variant._id}
                         type="button"
-                        onClick={() => setReplacement(variant)}
+                        onClick={() => {
+                          setReplacement(variant);
+                          setReplacementQuantities({});
+                        }}
                         className={`block w-full border-b px-3 py-2 text-left last:border-0 ${replacement?._id === variant._id ? "bg-[var(--brand-blue)]/10" : ""}`}
                       >
                         <b className="text-sm">{variant.variantName}</b>
@@ -626,6 +662,45 @@ function OrdersPage() {
                     ))
                   )}
                 </div>
+                {replacement ? (
+                  <div className="mt-4 space-y-3 border-t pt-3">
+                    <div className="text-xs font-bold text-muted-foreground">
+                      Available: {replacement.quantityAvailable ?? "Check at approval"}{" "}
+                      {replacement.sellingMode === "WEIGHT" ? "KG" : "PCS"}
+                    </div>
+                    {selectedItems.map((item) => (
+                      <label key={item._id} className="block text-sm font-semibold">
+                        Replacement quantity for {itemName(item)}
+                        <input
+                          type="number"
+                          min={replacement.sellingMode === "WEIGHT" ? 0.01 : 1}
+                          step={replacement.sellingMode === "WEIGHT" ? 0.01 : 1}
+                          value={
+                            replacementQuantities[item._id] ??
+                            replacementQuantityFor(
+                              item._id,
+                              quantities[item._id],
+                              {},
+                              replacement.sellingMode,
+                            )
+                          }
+                          onChange={(event) =>
+                            setReplacementQuantities((current) => ({
+                              ...current,
+                              [item._id]: event.target.value,
+                            }))
+                          }
+                          aria-label={`Replacement quantity for ${itemName(item)}`}
+                          className="mt-1 w-full rounded-md border px-3 py-2 text-right font-bold"
+                        />
+                      </label>
+                    ))}
+                    <p className="text-xs text-muted-foreground">
+                      Replacement quantities are independent of the quantities returned. Stock is
+                      checked again when approved and fulfilled.
+                    </p>
+                  </div>
+                ) : null}
               </section>
             ) : null}
 
@@ -675,6 +750,12 @@ function OrdersPage() {
                       : `Refund ${inr(returnedValue)}`}
               </div>
             </section>
+
+            {quantityError || exceedsReturnable ? (
+              <p role="alert" className="text-sm font-bold text-[var(--brand-red)]">
+                {quantityError || "Return quantity exceeds the remaining returnable quantity."}
+              </p>
+            ) : null}
 
             <button
               type="button"

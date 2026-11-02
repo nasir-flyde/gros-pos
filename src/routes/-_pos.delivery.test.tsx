@@ -14,6 +14,11 @@ const mocks = vi.hoisted(() => ({
   assignThirdParty: vi.fn(),
   manualPickup: vi.fn(),
   manualDelivery: vi.fn(),
+  listTasks: vi.fn(),
+  getTask: vi.fn(),
+  startPicking: vi.fn(),
+  recordPick: vi.fn(),
+  completePicking: vi.fn(),
 }));
 
 vi.mock("@/lib/order-api", async (importOriginal) => {
@@ -37,6 +42,18 @@ vi.mock("@/lib/delivery-api", () => ({
     assignThirdParty: mocks.assignThirdParty,
     manualPickup: mocks.manualPickup,
     manualDelivery: mocks.manualDelivery,
+  },
+}));
+
+vi.mock("@/lib/fulfillment-api", () => ({
+  fulfillmentApi: {
+    listTasks: mocks.listTasks,
+    getTask: mocks.getTask,
+    startPicking: mocks.startPicking,
+    recordPick: mocks.recordPick,
+    completePicking: mocks.completePicking,
+    orderIdValue: (task: { orderId: string | { _id: string } }) =>
+      typeof task.orderId === "string" ? task.orderId : task.orderId._id,
   },
 }));
 
@@ -65,6 +82,14 @@ const readyOrder: StoreDeliveryOrder = {
   deliveryAssignment: null,
   createdAt: "2026-08-10T08:00:00.000Z",
   updatedAt: "2026-08-10T08:30:00.000Z",
+};
+
+const pendingPackingOrder: StoreDeliveryOrder = {
+  ...readyOrder,
+  _id: "order-2",
+  orderNumber: "ORD-1002",
+  fulfillmentStatus: "RESERVED",
+  isDeliveryAssignable: false,
 };
 
 const renderPage = () => {
@@ -96,6 +121,7 @@ describe("DeliveryPage", () => {
         "delivery.manifest.view",
         "delivery.manifest.create",
         "delivery.confirm",
+        "order.fulfill",
       ],
       scopes: [{ type: "store", id: "store-1", name: "Main Store" }],
     });
@@ -104,10 +130,25 @@ describe("DeliveryPage", () => {
     mocks.getTracking.mockResolvedValue({ data: { orderId: "order-1", status: "PLACED" } });
     mocks.getEligibleAgents.mockResolvedValue({ data: [] });
     mocks.assignThirdParty.mockResolvedValue({ data: {} });
+    mocks.listTasks.mockResolvedValue({ data: [{ _id: "task-1", orderId: "order-2" }] });
+    mocks.getTask.mockResolvedValue({
+      data: {
+        _id: "task-1",
+        orderId: "order-2",
+        storeId: "store-1",
+        status: "PENDING",
+        items: [{ _id: "fulfillment-item-1", quantityRequested: 2 }],
+      },
+    });
+    mocks.startPicking.mockResolvedValue({ data: { _id: "task-1" } });
+    mocks.recordPick.mockResolvedValue({ data: { _id: "fulfillment-item-1" } });
+    mocks.completePicking.mockResolvedValue({ data: { _id: "task-1" } });
   });
 
   it("renders the two workflows and assigns a third-party provider", async () => {
     renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Ready to Assign/i }));
 
     expect(await screen.findByText("ORD-1001")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Home Delivery/i })).toBeInTheDocument();
@@ -129,9 +170,37 @@ describe("DeliveryPage", () => {
     );
   });
 
+  it("shows unassigned home deliveries before packing is complete", async () => {
+    mocks.listStoreDeliveries.mockResolvedValue({ data: [pendingPackingOrder] });
+
+    renderPage();
+
+    expect(await screen.findByText("ORD-1002")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pending Packing 1/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Assign$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Mark Packed/i })).toBeInTheDocument();
+  });
+
+  it("marks all fulfillment items packed for a pending delivery", async () => {
+    mocks.listStoreDeliveries.mockResolvedValue({ data: [pendingPackingOrder] });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Mark Packed/i }));
+
+    await waitFor(() => expect(mocks.completePicking).toHaveBeenCalledWith("task-1"));
+    expect(mocks.startPicking).toHaveBeenCalledWith("task-1");
+    expect(mocks.recordPick).toHaveBeenCalledWith("task-1", {
+      fulfillmentItemId: "fulfillment-item-1",
+      quantityPicked: 2,
+    });
+  });
+
   it("hides dispatch actions without manager permissions", async () => {
     useAuthStore.setState({ permissions: ["order.read"] });
     renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Ready to Assign/i }));
 
     expect(await screen.findByText("ORD-1001")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Assign$/i })).not.toBeInTheDocument();
