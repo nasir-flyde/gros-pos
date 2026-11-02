@@ -3,11 +3,7 @@ import { getEffectiveVariantPrice, getPosImageUrl, type PosVariant } from "@/lib
 import type { MarkdownLabelResolution } from "@/lib/markdown-api";
 
 export type ScannerCameraErrorName =
-  | "NotAllowedError"
-  | "NotFoundError"
-  | "NotReadableError"
-  | string
-  | undefined;
+  "NotAllowedError" | "NotFoundError" | "NotReadableError" | string | undefined;
 
 export function normalizeBarcodeInput(value: string): string {
   return value.trim().toUpperCase();

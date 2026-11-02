@@ -96,12 +96,7 @@ export interface PosOrder {
 
 export type DeliveryMode = "IN_HOUSE" | "THIRD_PARTY";
 export type DeliveryOrderStatus =
-  | "ASSIGNED"
-  | "PICKED_UP"
-  | "OUT_FOR_DELIVERY"
-  | "DELIVERED"
-  | "FAILED"
-  | "REATTEMPT_SCHEDULED";
+  "ASSIGNED" | "PICKED_UP" | "OUT_FOR_DELIVERY" | "DELIVERED" | "FAILED" | "REATTEMPT_SCHEDULED";
 
 export interface DeliveryAgentRef {
   _id: string;

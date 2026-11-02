@@ -1,11 +1,7 @@
 import { api } from "@/lib/api";
 
 export type ReturnResolution =
-  | "REFUND"
-  | "SAME_ITEM_EXCHANGE"
-  | "DIFFERENT_ITEM_EXCHANGE"
-  | "STORE_CREDIT"
-  | "FREE_REPLACEMENT";
+  "REFUND" | "SAME_ITEM_EXCHANGE" | "DIFFERENT_ITEM_EXCHANGE" | "STORE_CREDIT" | "FREE_REPLACEMENT";
 export type RefundMethod = "CASH" | "UPI" | "CARD" | "WALLET" | "STORE_CREDIT";
 export type ReturnDisposition = "SELLABLE" | "DAMAGED" | "EXPIRED" | "QUARANTINE";
 export type ExchangePaymentMethod = "CASH" | "UPI" | "CARD";

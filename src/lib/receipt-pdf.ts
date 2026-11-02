@@ -214,8 +214,7 @@ export function generateReceiptPdf(r: Record<string, unknown>) {
 
   // ── GST Breakup ──
   const gstByRate = s.gstByRate as
-    | Record<string, { taxable: number; cgst: number; sgst: number }>
-    | undefined;
+    Record<string, { taxable: number; cgst: number; sgst: number }> | undefined;
   if (gstByRate && Object.keys(gstByRate).length > 0) {
     hrDash();
     txt("GST BREAKUP DETAILS", { bold: true, align: "center" });

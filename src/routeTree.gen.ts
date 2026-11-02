@@ -9,33 +9,32 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as PosRouteImport } from './routes/_pos'
+import { Route as ChangePasswordRouteImport } from './routes/change-password'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as PosIndexRouteImport } from './routes/_pos.index'
-import { Route as PosTransferStockRouteImport } from './routes/_pos.transfer-stock'
-import { Route as PosSuccessRouteImport } from './routes/_pos.success'
-import { Route as PosShelfLabelsRouteImport } from './routes/_pos.shelf-labels'
-import { Route as PosScannerRouteImport } from './routes/_pos.scanner'
-import { Route as PosReturnsRouteImport } from './routes/_pos.returns'
-import { Route as PosRequestStockRouteImport } from './routes/_pos.request-stock'
-import { Route as PosReportsRouteImport } from './routes/_pos.reports'
-import { Route as PosPurchaseRequestRouteImport } from './routes/_pos.purchase-request'
-import { Route as PosPackBreakdownRouteImport } from './routes/_pos.pack-breakdown'
-import { Route as PosOrdersRouteImport } from './routes/_pos.orders'
-import { Route as PosNewOrderRouteImport } from './routes/_pos.new-order'
-import { Route as PosMarkdownDamageRouteImport } from './routes/_pos.markdown-damage'
-import { Route as PosInventoryRouteImport } from './routes/_pos.inventory'
-import { Route as PosHoldRouteImport } from './routes/_pos.hold'
-import { Route as PosDeliveryRouteImport } from './routes/_pos.delivery'
-import { Route as PosCustomersRouteImport } from './routes/_pos.customers'
-import { Route as PosCheckoutRouteImport } from './routes/_pos.checkout'
 import { Route as PosCashRouteImport } from './routes/_pos.cash'
+import { Route as PosCheckoutRouteImport } from './routes/_pos.checkout'
+import { Route as PosCustomersRouteImport } from './routes/_pos.customers'
+import { Route as PosDeliveryRouteImport } from './routes/_pos.delivery'
+import { Route as PosHoldRouteImport } from './routes/_pos.hold'
+import { Route as PosInventoryRouteImport } from './routes/_pos.inventory'
+import { Route as PosMarkdownDamageRouteImport } from './routes/_pos.markdown-damage'
+import { Route as PosNewOrderRouteImport } from './routes/_pos.new-order'
+import { Route as PosOrdersRouteImport } from './routes/_pos.orders'
+import { Route as PosPackBreakdownRouteImport } from './routes/_pos.pack-breakdown'
+import { Route as PosPurchaseRequestRouteImport } from './routes/_pos.purchase-request'
+import { Route as PosReportsRouteImport } from './routes/_pos.reports'
+import { Route as PosRequestStockRouteImport } from './routes/_pos.request-stock'
+import { Route as PosReturnsRouteImport } from './routes/_pos.returns'
+import { Route as PosScannerRouteImport } from './routes/_pos.scanner'
+import { Route as PosShelfLabelsRouteImport } from './routes/_pos.shelf-labels'
+import { Route as PosSuccessRouteImport } from './routes/_pos.success'
+import { Route as PosTransferStockRouteImport } from './routes/_pos.transfer-stock'
 import { Route as PosCustomersCustomerIdRouteImport } from './routes/_pos.customers.$customerId'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const PosRoute = PosRouteImport.update({
+  id: '/_pos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChangePasswordRoute = ChangePasswordRouteImport.update({
@@ -43,8 +42,9 @@ const ChangePasswordRoute = ChangePasswordRouteImport.update({
   path: '/change-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PosRoute = PosRouteImport.update({
-  id: '/_pos',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PosIndexRoute = PosIndexRouteImport.update({
@@ -52,84 +52,9 @@ const PosIndexRoute = PosIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PosRoute,
 } as any)
-const PosTransferStockRoute = PosTransferStockRouteImport.update({
-  id: '/transfer-stock',
-  path: '/transfer-stock',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosSuccessRoute = PosSuccessRouteImport.update({
-  id: '/success',
-  path: '/success',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosShelfLabelsRoute = PosShelfLabelsRouteImport.update({
-  id: '/shelf-labels',
-  path: '/shelf-labels',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosScannerRoute = PosScannerRouteImport.update({
-  id: '/scanner',
-  path: '/scanner',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosReturnsRoute = PosReturnsRouteImport.update({
-  id: '/returns',
-  path: '/returns',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosRequestStockRoute = PosRequestStockRouteImport.update({
-  id: '/request-stock',
-  path: '/request-stock',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosReportsRoute = PosReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosPurchaseRequestRoute = PosPurchaseRequestRouteImport.update({
-  id: '/purchase-request',
-  path: '/purchase-request',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosPackBreakdownRoute = PosPackBreakdownRouteImport.update({
-  id: '/pack-breakdown',
-  path: '/pack-breakdown',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosOrdersRoute = PosOrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosNewOrderRoute = PosNewOrderRouteImport.update({
-  id: '/new-order',
-  path: '/new-order',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosMarkdownDamageRoute = PosMarkdownDamageRouteImport.update({
-  id: '/markdown-damage',
-  path: '/markdown-damage',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosInventoryRoute = PosInventoryRouteImport.update({
-  id: '/inventory',
-  path: '/inventory',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosHoldRoute = PosHoldRouteImport.update({
-  id: '/hold',
-  path: '/hold',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosDeliveryRoute = PosDeliveryRouteImport.update({
-  id: '/delivery',
-  path: '/delivery',
-  getParentRoute: () => PosRoute,
-} as any)
-const PosCustomersRoute = PosCustomersRouteImport.update({
-  id: '/customers',
-  path: '/customers',
+const PosCashRoute = PosCashRouteImport.update({
+  id: '/cash',
+  path: '/cash',
   getParentRoute: () => PosRoute,
 } as any)
 const PosCheckoutRoute = PosCheckoutRouteImport.update({
@@ -137,9 +62,84 @@ const PosCheckoutRoute = PosCheckoutRouteImport.update({
   path: '/checkout',
   getParentRoute: () => PosRoute,
 } as any)
-const PosCashRoute = PosCashRouteImport.update({
-  id: '/cash',
-  path: '/cash',
+const PosCustomersRoute = PosCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosDeliveryRoute = PosDeliveryRouteImport.update({
+  id: '/delivery',
+  path: '/delivery',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosHoldRoute = PosHoldRouteImport.update({
+  id: '/hold',
+  path: '/hold',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosInventoryRoute = PosInventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosMarkdownDamageRoute = PosMarkdownDamageRouteImport.update({
+  id: '/markdown-damage',
+  path: '/markdown-damage',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosNewOrderRoute = PosNewOrderRouteImport.update({
+  id: '/new-order',
+  path: '/new-order',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosOrdersRoute = PosOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosPackBreakdownRoute = PosPackBreakdownRouteImport.update({
+  id: '/pack-breakdown',
+  path: '/pack-breakdown',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosPurchaseRequestRoute = PosPurchaseRequestRouteImport.update({
+  id: '/purchase-request',
+  path: '/purchase-request',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosReportsRoute = PosReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosRequestStockRoute = PosRequestStockRouteImport.update({
+  id: '/request-stock',
+  path: '/request-stock',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosReturnsRoute = PosReturnsRouteImport.update({
+  id: '/returns',
+  path: '/returns',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosScannerRoute = PosScannerRouteImport.update({
+  id: '/scanner',
+  path: '/scanner',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosShelfLabelsRoute = PosShelfLabelsRouteImport.update({
+  id: '/shelf-labels',
+  path: '/shelf-labels',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosSuccessRoute = PosSuccessRouteImport.update({
+  id: '/success',
+  path: '/success',
+  getParentRoute: () => PosRoute,
+} as any)
+const PosTransferStockRoute = PosTransferStockRouteImport.update({
+  id: '/transfer-stock',
+  path: '/transfer-stock',
   getParentRoute: () => PosRoute,
 } as any)
 const PosCustomersCustomerIdRoute = PosCustomersCustomerIdRouteImport.update({
@@ -306,11 +306,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/_pos': {
+      id: '/_pos'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof PosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/change-password': {
@@ -320,11 +320,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChangePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_pos': {
-      id: '/_pos'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof PosRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_pos/': {
@@ -334,116 +334,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PosIndexRouteImport
       parentRoute: typeof PosRoute
     }
-    '/_pos/transfer-stock': {
-      id: '/_pos/transfer-stock'
-      path: '/transfer-stock'
-      fullPath: '/transfer-stock'
-      preLoaderRoute: typeof PosTransferStockRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/success': {
-      id: '/_pos/success'
-      path: '/success'
-      fullPath: '/success'
-      preLoaderRoute: typeof PosSuccessRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/shelf-labels': {
-      id: '/_pos/shelf-labels'
-      path: '/shelf-labels'
-      fullPath: '/shelf-labels'
-      preLoaderRoute: typeof PosShelfLabelsRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/scanner': {
-      id: '/_pos/scanner'
-      path: '/scanner'
-      fullPath: '/scanner'
-      preLoaderRoute: typeof PosScannerRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/returns': {
-      id: '/_pos/returns'
-      path: '/returns'
-      fullPath: '/returns'
-      preLoaderRoute: typeof PosReturnsRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/request-stock': {
-      id: '/_pos/request-stock'
-      path: '/request-stock'
-      fullPath: '/request-stock'
-      preLoaderRoute: typeof PosRequestStockRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/reports': {
-      id: '/_pos/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof PosReportsRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/purchase-request': {
-      id: '/_pos/purchase-request'
-      path: '/purchase-request'
-      fullPath: '/purchase-request'
-      preLoaderRoute: typeof PosPurchaseRequestRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/pack-breakdown': {
-      id: '/_pos/pack-breakdown'
-      path: '/pack-breakdown'
-      fullPath: '/pack-breakdown'
-      preLoaderRoute: typeof PosPackBreakdownRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/orders': {
-      id: '/_pos/orders'
-      path: '/orders'
-      fullPath: '/orders'
-      preLoaderRoute: typeof PosOrdersRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/new-order': {
-      id: '/_pos/new-order'
-      path: '/new-order'
-      fullPath: '/new-order'
-      preLoaderRoute: typeof PosNewOrderRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/markdown-damage': {
-      id: '/_pos/markdown-damage'
-      path: '/markdown-damage'
-      fullPath: '/markdown-damage'
-      preLoaderRoute: typeof PosMarkdownDamageRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/inventory': {
-      id: '/_pos/inventory'
-      path: '/inventory'
-      fullPath: '/inventory'
-      preLoaderRoute: typeof PosInventoryRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/hold': {
-      id: '/_pos/hold'
-      path: '/hold'
-      fullPath: '/hold'
-      preLoaderRoute: typeof PosHoldRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/delivery': {
-      id: '/_pos/delivery'
-      path: '/delivery'
-      fullPath: '/delivery'
-      preLoaderRoute: typeof PosDeliveryRouteImport
-      parentRoute: typeof PosRoute
-    }
-    '/_pos/customers': {
-      id: '/_pos/customers'
-      path: '/customers'
-      fullPath: '/customers'
-      preLoaderRoute: typeof PosCustomersRouteImport
+    '/_pos/cash': {
+      id: '/_pos/cash'
+      path: '/cash'
+      fullPath: '/cash'
+      preLoaderRoute: typeof PosCashRouteImport
       parentRoute: typeof PosRoute
     }
     '/_pos/checkout': {
@@ -453,11 +348,116 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PosCheckoutRouteImport
       parentRoute: typeof PosRoute
     }
-    '/_pos/cash': {
-      id: '/_pos/cash'
-      path: '/cash'
-      fullPath: '/cash'
-      preLoaderRoute: typeof PosCashRouteImport
+    '/_pos/customers': {
+      id: '/_pos/customers'
+      path: '/customers'
+      fullPath: '/customers'
+      preLoaderRoute: typeof PosCustomersRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/delivery': {
+      id: '/_pos/delivery'
+      path: '/delivery'
+      fullPath: '/delivery'
+      preLoaderRoute: typeof PosDeliveryRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/hold': {
+      id: '/_pos/hold'
+      path: '/hold'
+      fullPath: '/hold'
+      preLoaderRoute: typeof PosHoldRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/inventory': {
+      id: '/_pos/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof PosInventoryRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/markdown-damage': {
+      id: '/_pos/markdown-damage'
+      path: '/markdown-damage'
+      fullPath: '/markdown-damage'
+      preLoaderRoute: typeof PosMarkdownDamageRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/new-order': {
+      id: '/_pos/new-order'
+      path: '/new-order'
+      fullPath: '/new-order'
+      preLoaderRoute: typeof PosNewOrderRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/orders': {
+      id: '/_pos/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof PosOrdersRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/pack-breakdown': {
+      id: '/_pos/pack-breakdown'
+      path: '/pack-breakdown'
+      fullPath: '/pack-breakdown'
+      preLoaderRoute: typeof PosPackBreakdownRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/purchase-request': {
+      id: '/_pos/purchase-request'
+      path: '/purchase-request'
+      fullPath: '/purchase-request'
+      preLoaderRoute: typeof PosPurchaseRequestRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/reports': {
+      id: '/_pos/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof PosReportsRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/request-stock': {
+      id: '/_pos/request-stock'
+      path: '/request-stock'
+      fullPath: '/request-stock'
+      preLoaderRoute: typeof PosRequestStockRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/returns': {
+      id: '/_pos/returns'
+      path: '/returns'
+      fullPath: '/returns'
+      preLoaderRoute: typeof PosReturnsRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/scanner': {
+      id: '/_pos/scanner'
+      path: '/scanner'
+      fullPath: '/scanner'
+      preLoaderRoute: typeof PosScannerRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/shelf-labels': {
+      id: '/_pos/shelf-labels'
+      path: '/shelf-labels'
+      fullPath: '/shelf-labels'
+      preLoaderRoute: typeof PosShelfLabelsRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/success': {
+      id: '/_pos/success'
+      path: '/success'
+      fullPath: '/success'
+      preLoaderRoute: typeof PosSuccessRouteImport
+      parentRoute: typeof PosRoute
+    }
+    '/_pos/transfer-stock': {
+      id: '/_pos/transfer-stock'
+      path: '/transfer-stock'
+      fullPath: '/transfer-stock'
+      preLoaderRoute: typeof PosTransferStockRouteImport
       parentRoute: typeof PosRoute
     }
     '/_pos/customers/$customerId': {

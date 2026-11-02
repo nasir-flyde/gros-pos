@@ -2,10 +2,7 @@ import { api } from "@/lib/api";
 import type { DeliveryAgentRef } from "@/lib/order-api";
 
 export type ManualDeliveryReason =
-  | "SCANNER_UNAVAILABLE"
-  | "CUSTOMER_CONFIRMED"
-  | "THIRD_PARTY_CONFIRMED"
-  | "OTHER";
+  "SCANNER_UNAVAILABLE" | "CUSTOMER_CONFIRMED" | "THIRD_PARTY_CONFIRMED" | "OTHER";
 
 interface ApiResponse<T> {
   success: boolean;

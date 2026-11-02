@@ -26,12 +26,7 @@ export const isMarkdownCode = (value: string) =>
 export type MarkdownRequestType = "NEAR_EXPIRY" | "DAMAGED_DUMP";
 export type MarkdownRequestStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELLED";
 export type MarkdownDamageType =
-  | "PACKAGING_DAMAGE"
-  | "COSMETIC_DAMAGE"
-  | "LEAKAGE"
-  | "BREAKAGE"
-  | "CONTAMINATION"
-  | "OTHER";
+  "PACKAGING_DAMAGE" | "COSMETIC_DAMAGE" | "LEAKAGE" | "BREAKAGE" | "CONTAMINATION" | "OTHER";
 
 export interface MarkdownRequestScan {
   productVariantId: string;
