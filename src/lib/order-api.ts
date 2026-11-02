@@ -168,6 +168,7 @@ export interface PosQuoteResult {
     discountPercent: number;
     delivery: number;
     grandTotal: number;
+    employeeDiscount?: number;
   };
   appliedOffers: Array<{
     promotionId: string;
@@ -175,8 +176,18 @@ export interface PosQuoteResult {
     promotionType?: string;
     discountAmount: number;
   }>;
-  coupon: Record<string, unknown> | null;
-  couponDecision: Record<string, unknown>;
+  coupon: { code: string; discountAmount: number } | null;
+  couponDecision: { status?: string; code?: string };
+  employeeDiscount?: {
+    employeeName?: string;
+    employeeCode?: string;
+    discountPercent: number;
+    amount: number;
+    limitedBy?: string | null;
+    monthlyCapAmount?: number | null;
+    monthlyRemaining?: number | null;
+  } | null;
+  employeeDecision?: { status?: string; amount?: number };
   quoteVersion: string | null;
 }
 

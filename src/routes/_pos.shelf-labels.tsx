@@ -92,6 +92,7 @@ function ShelfLabelPage() {
   const [reason, setReason] = useState<"ALL" | ShelfLabelReason>("ALL");
   const [page, setPage] = useState(1);
   const [layout, setLayout] = useState<ShelfLabelLayout>("THERMAL_50X30");
+  const [cartProducts, setCartProducts] = useState<Record<string, ShelfLabelCandidate>>({});
   const [selection, setSelection] = useState<Record<string, number>>({});
   const [historySearch, setHistorySearch] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -170,6 +171,7 @@ function ShelfLabelPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (!canPrint) throw new Error("You do not have print permission.");
       if (!storeId) throw new Error("Select a store first.");
       const items = buildShelfLabelItems(selection);
       if (!items.length) throw new Error("Select at least one printable product.");
@@ -180,6 +182,7 @@ function ShelfLabelPage() {
     onSuccess: (response) => {
       toast.success(`${response.data.totalLabels} labels are ready to print.`);
       setSelection({});
+      setCartProducts({});
       void queryClient.invalidateQueries({ queryKey: ["shelf-label-history"] });
     },
     onError: (error: unknown) => {
@@ -207,9 +210,11 @@ function ShelfLabelPage() {
   const clearProductSelection = () => {
     setPage(1);
     setSelection({});
+    setCartProducts({});
   };
 
   const updateSelection = (candidate: ShelfLabelCandidate, checked: boolean) => {
+    setCartProducts((current) => ({ ...current, [candidate.productVariantId]: candidate }));
     setSelection((current) => {
       const next = { ...current };
       if (checked) next[candidate.productVariantId] = next[candidate.productVariantId] || 1;
@@ -234,6 +239,7 @@ function ShelfLabelPage() {
           <label className="text-xs font-bold text-muted-foreground">
             Assigned store
             <select
+              disabled={createMutation.isPending}
               aria-label="Assigned store"
               className={`${fieldClass} mt-1 min-w-64`}
               value={storeId}
@@ -283,7 +289,7 @@ function ShelfLabelPage() {
                   onSubmit={(event) => {
                     event.preventDefault();
                     setSearch(searchInput.trim());
-                    clearProductSelection();
+                    setPage(1);
                   }}
                 >
                   <label className="flex-1 text-xs font-bold text-muted-foreground">
@@ -311,7 +317,7 @@ function ShelfLabelPage() {
                     value={reason}
                     onChange={(event) => {
                       setReason(event.target.value as typeof reason);
-                      clearProductSelection();
+                      setPage(1);
                     }}
                   >
                     {reasonOptions.map((option) => (
@@ -324,13 +330,14 @@ function ShelfLabelPage() {
                 <label className="text-xs font-bold text-muted-foreground">
                   Print layout
                   <select
+                    disabled={createMutation.isPending}
                     aria-label="Print layout"
                     className={`${fieldClass} mt-1 min-w-48`}
                     value={layout}
                     onChange={(event) => setLayout(event.target.value as ShelfLabelLayout)}
                   >
                     <option value="THERMAL_50X30">Thermal — 50 × 30 mm</option>
-                    <option value="A4_50X30">A4 sheet — 36 labels</option>
+                    <option value="A4_50X30">A4 sheet — 1 POP per page</option>
                   </select>
                 </label>
               </section>
@@ -346,9 +353,15 @@ function ShelfLabelPage() {
                   <label className="flex items-center gap-2 text-xs font-bold">
                     <input
                       type="checkbox"
-                      disabled={!canPrint || printableRows.length === 0}
+                      disabled={!canPrint || createMutation.isPending || printableRows.length === 0}
                       checked={allPageSelected}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setCartProducts((current) => ({
+                          ...current,
+                          ...Object.fromEntries(
+                            printableRows.map((row) => [row.productVariantId, row]),
+                          ),
+                        }));
                         setSelection((current) => {
                           const next = { ...current };
                           printableRows.forEach((row) => {
@@ -356,10 +369,10 @@ function ShelfLabelPage() {
                             else delete next[row.productVariantId];
                           });
                           return next;
-                        })
-                      }
+                        });
+                      }}
                     />
-                    Select printable page
+                    Add printable page to cart
                   </label>
                 </div>
                 {candidatesQuery.isLoading ? (
@@ -383,7 +396,7 @@ function ShelfLabelPage() {
                   <CandidateTable
                     candidates={candidates}
                     selection={selection}
-                    canPrint={canPrint}
+                    canPrint={canPrint && !createMutation.isPending}
                     onSelectionChange={updateSelection}
                     onCopiesChange={(id, quantity) =>
                       setSelection((current) => ({ ...current, [id]: quantity }))
@@ -398,7 +411,6 @@ function ShelfLabelPage() {
                       className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40"
                       onClick={() => {
                         setPage((value) => Math.max(1, value - 1));
-                        setSelection({});
                       }}
                     >
                       Previous
@@ -411,13 +423,67 @@ function ShelfLabelPage() {
                       className="rounded-lg border px-3 py-2 font-bold disabled:opacity-40"
                       onClick={() => {
                         setPage((value) => value + 1);
-                        setSelection({});
                       }}
                     >
                       Next
                     </button>
                   </div>
                 </div>
+              </section>
+
+              <section
+                aria-label="POP print cart"
+                className="rounded-2xl border-2 bg-card p-4 space-y-3"
+              >
+                <h2 className="font-extrabold">POP / Shelf Edge Label print cart</h2>
+                <p className="text-xs text-muted-foreground">
+                  Add products from suggestions. Your cart stays while searching or changing pages.
+                  All copies use the selected print layout.
+                </p>
+                {Object.keys(selection).length === 0 ? (
+                  <p>Your print cart is empty.</p>
+                ) : (
+                  Object.entries(selection).map(([id, quantity]) => (
+                    <div key={id} className="flex flex-wrap items-center gap-3 border-t pt-3">
+                      <span className="flex-1 font-bold">
+                        {cartProducts[id]?.productName} · {cartProducts[id]?.variantName} ·{" "}
+                        {cartProducts[id]?.sku}
+                      </span>
+                      <label>
+                        Copies
+                        <input
+                          aria-label={`Cart copies for ${cartProducts[id]?.sku}`}
+                          type="number"
+                          min={1}
+                          max={500}
+                          disabled={!canPrint || createMutation.isPending}
+                          value={quantity}
+                          className="ml-2 w-20 rounded-lg border p-2"
+                          onChange={(event) =>
+                            setSelection((current) => ({
+                              ...current,
+                              [id]: Math.max(1, Math.min(500, Number(event.target.value) || 1)),
+                            }))
+                          }
+                        />
+                      </label>
+                      <button
+                        disabled={!canPrint || createMutation.isPending}
+                        aria-label={`Remove ${cartProducts[id]?.sku}`}
+                        className="rounded-lg border px-3 py-2"
+                        onClick={() =>
+                          setSelection((current) => {
+                            const next = { ...current };
+                            delete next[id];
+                            return next;
+                          })
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))
+                )}
               </section>
 
               <div className="sticky bottom-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 bg-background/95 p-4 shadow-lg backdrop-blur">
@@ -439,7 +505,7 @@ function ShelfLabelPage() {
                   ) : (
                     <Printer className="size-4" />
                   )}
-                  Generate preview
+                  Print cart
                 </button>
               </div>
             </>
@@ -530,7 +596,7 @@ function CandidateTable({
       <table className="w-full text-left text-sm">
         <thead className="text-xs font-extrabold uppercase text-muted-foreground">
           <tr>
-            <th className="px-4 py-3">Print</th>
+            <th className="px-4 py-3">Add to cart</th>
             <th className="px-4 py-3">Product</th>
             <th className="px-4 py-3">Reason</th>
             <th className="px-4 py-3">Price</th>
@@ -615,7 +681,7 @@ function CandidateTable({
                     type="number"
                     min={1}
                     max={500}
-                    disabled={!checked}
+                    disabled={!checked || !canPrint}
                     className="h-10 w-20 rounded-lg border-2 bg-background px-2 font-bold"
                     value={selection[candidate.productVariantId] || 1}
                     onChange={(event) =>
@@ -720,7 +786,7 @@ function HistoryTable({
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    {batch.layout === "THERMAL_50X30" ? "Thermal 50 × 30" : "A4 · 36 per page"}
+                    {batch.layout === "THERMAL_50X30" ? "Thermal 50 × 30" : "A4 · 1 POP per page"}
                   </td>
                   <td className="px-4 py-3 font-extrabold">{batch.totalLabels}</td>
                   <td className="px-4 py-3">{formatDate(batch.generatedAt)}</td>

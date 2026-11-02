@@ -17,6 +17,8 @@ const receipt: NormalizedReceipt = {
       lineTotal: 255,
       cgst: 6.07,
       sgst: 6.07,
+      igst: 0,
+      netPrice: 121.43,
       hsnCode: "1001",
     },
   ],
@@ -41,7 +43,7 @@ const receipt: NormalizedReceipt = {
   grossAmount: 255,
   netSalesValue: 255,
   gstByRate: {
-    5: { taxable: 242.86, cgst: 6.07, sgst: 6.07 },
+    5: { taxable: 242.86, cgst: 6.07, sgst: 6.07, igst: 0 },
   },
   storeName: "CHHOTA BAZAAR",
   storePhone: "9999999999",
@@ -52,6 +54,8 @@ const receipt: NormalizedReceipt = {
   cinNumber: "U12345WB2024PTC000001",
   totalCgst: 6.07,
   totalSgst: 6.07,
+  totalIgst: 0,
+  gstBuyer: null,
   totalGst: 12.14,
   taxableValue: 242.86,
   paymentRef: "UPI12345",
@@ -97,7 +101,7 @@ describe("receipt printing", () => {
       expect(backendReceipt?.textContent).toContain("Backend invoice INV-2002");
       expect(backendReceipt).toHaveClass("receipt-document");
       expect(backendReceipt?.querySelector("[data-receipt-print-content]")).not.toBeNull();
-      expect(printStyles).toContain("font-family: Arial, Helvetica, sans-serif !important");
+      expect(printStyles).toContain("font-family: 'Courier New', Courier, monospace !important");
       expect(printStyles).toContain("font-weight: 600 !important");
       expect(printStyles).toContain("color: #000 !important");
       expect(printStyles).toContain("border-color: #000 !important");
@@ -112,6 +116,26 @@ describe("receipt printing", () => {
 
     expect(document.getElementById("pos-receipt-print-root")).toBeNull();
     expect(document.getElementById("pos-receipt-print-style")).toBeNull();
+  });
+
+  it("applies the print sizing directly to a backend receipt element", async () => {
+    vi.spyOn(window, "print").mockImplementation(() => {
+      const root = document.getElementById("pos-receipt-print-root");
+      const wrapper = root?.querySelector("[data-backend-receipt-html]");
+      const receiptElement = wrapper?.querySelector(".receipt");
+
+      expect(receiptElement).toHaveAttribute("data-receipt-print-content");
+      expect(wrapper).not.toHaveAttribute("data-receipt-print-content");
+      expect(receiptElement?.textContent).toContain("HSN Code");
+      expect(receiptElement?.textContent).toContain("21069099");
+      window.dispatchEvent(new Event("afterprint"));
+    });
+
+    await expect(
+      printReceiptHtml(
+        '<html><body><main class="receipt"><div>HSN Code</div><div>21069099</div></main></body></html>',
+      ),
+    ).resolves.toBe(true);
   });
 
   it("cleans up and reports failure when printing throws", async () => {

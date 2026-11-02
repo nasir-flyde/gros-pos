@@ -2,6 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuthStore } from "@/lib/auth-store";
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { posMaintenanceAccess } from "@/lib/pos-maintenance";
+
 const mocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
   clearQueries: vi.fn(),
@@ -28,11 +31,6 @@ vi.mock("@clerk/react", () => ({
   }),
 }));
 
-vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => queryClient,
-}));
-const queryClient = { clear: mocks.clearQueries };
-
 vi.mock("@/lib/pos-config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/pos-config")>()),
   loadPublicPosConfig: vi.fn(),
@@ -51,7 +49,19 @@ vi.mock("@/lib/api", () => ({
   setClerkTokenGetter: (...args: unknown[]) => mocks.setTokenGetter(...args),
 }));
 
-import { AuthProvider } from "./auth-provider";
+import { loadProtectedPosConfig } from "@/lib/pos-config";
+import { AuthProvider as RealAuthProvider } from "./auth-provider";
+
+function AuthProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      <RealAuthProvider>{children}</RealAuthProvider>
+    </QueryClientProvider>
+  );
+}
+const maintenanceResponse = {
+  data: { enabled: true, canBypass: false, canManage: false, updatedAt: null },
+};
 
 const accessResponse = {
   data: {
@@ -70,6 +80,80 @@ const accessResponse = {
 };
 
 describe("AuthProvider", () => {
+  it("gates ordinary bootstrap without mounting business content, then reopens on retry", async () => {
+    mocks.apiGet.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/auth/me"
+          ? accessResponse
+          : { data: { ...maintenanceResponse.data, enabled: false } },
+      ),
+    );
+    const mounted = vi.fn();
+    function Business() {
+      mounted();
+      return <div>Business page</div>;
+    }
+    render(
+      <AuthProvider>
+        <Business />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText("Could Not Load Information")).toBeInTheDocument();
+    expect(mounted).not.toHaveBeenCalled();
+    expect(mocks.apiGet.mock.calls.map((call) => call[0])).toEqual([
+      "/auth/me",
+      "/pos/maintenance",
+    ]);
+    posMaintenanceAccess.reset();
+    mocks.apiGet.mockResolvedValue(maintenanceResponse);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Business page")).toBeInTheDocument();
+  });
+  it("clears previous bypass, query cache and cart on signed-in account switch", async () => {
+    const client = new QueryClient();
+    mocks.apiGet.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/auth/me"
+          ? accessResponse
+          : {
+              data: {
+                ...maintenanceResponse.data,
+                enabled: false,
+                canBypass: true,
+                canManage: true,
+              },
+            },
+      ),
+    );
+    const view = render(
+      <QueryClientProvider client={client}>
+        <RealAuthProvider>Business page</RealAuthProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Business page")).toBeInTheDocument();
+    client.setQueryData(["private"], "previous account");
+    sessionStorage.setItem("pos_active_cart", '{"items":["private"]}');
+    mocks.auth.sessionId = "session-2";
+    mocks.auth.userId = "clerk-user-2";
+    mocks.apiGet.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/auth/me"
+          ? accessResponse
+          : { data: { ...maintenanceResponse.data, enabled: false } },
+      ),
+    );
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <RealAuthProvider>Business page</RealAuthProvider>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText("Business page")).not.toBeInTheDocument();
+    expect(await screen.findByText("Could Not Load Information")).toBeInTheDocument();
+    expect(client.getQueryData(["private"])).toBeUndefined();
+    expect(sessionStorage.getItem("pos_active_cart")).toBeNull();
+    expect(posMaintenanceAccess.canUsePos()).toBe(false);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.consoleError.mockClear();
@@ -77,7 +161,12 @@ describe("AuthProvider", () => {
     mocks.auth.isSignedIn = true;
     mocks.auth.orgId = "org-1";
     mocks.pathname = "/";
-    mocks.apiGet.mockResolvedValue(accessResponse);
+    posMaintenanceAccess.reset();
+    mocks.auth.sessionId = "session-1";
+    mocks.auth.userId = "clerk-user-1";
+    mocks.apiGet.mockImplementation((path: string) =>
+      Promise.resolve(path === "/auth/me" ? accessResponse : maintenanceResponse),
+    );
     useAuthStore.getState().clearGrosAccess();
   });
 
@@ -112,7 +201,8 @@ describe("AuthProvider", () => {
   it("recovers from a generic access failure when Retry succeeds", async () => {
     mocks.apiGet
       .mockRejectedValueOnce({ code: "NETWORK_ERROR", message: "Backend unavailable" })
-      .mockResolvedValueOnce(accessResponse);
+      .mockResolvedValueOnce(accessResponse)
+      .mockResolvedValueOnce(maintenanceResponse);
 
     render(<AuthProvider>Authenticated home</AuthProvider>);
 
@@ -120,7 +210,7 @@ describe("AuthProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
     expect(await screen.findByText("Authenticated home")).toBeInTheDocument();
-    expect(mocks.apiGet).toHaveBeenCalledTimes(2);
+    expect(mocks.apiGet).toHaveBeenCalledTimes(3);
   });
 
   it("treats a malformed access response as recoverable", async () => {
@@ -132,6 +222,23 @@ describe("AuthProvider", () => {
     expect(
       screen.getByText("The access service returned an invalid response."),
     ).toBeInTheDocument();
+  });
+
+  it("loads protected config only after the maintenance gate opens", async () => {
+    let openGate: ((value: typeof maintenanceResponse) => void) | undefined;
+    mocks.apiGet.mockImplementation((path: string) =>
+      path === "/auth/me"
+        ? Promise.resolve(accessResponse)
+        : new Promise((resolve) => {
+            openGate = resolve;
+          }),
+    );
+    render(<AuthProvider>Authenticated home</AuthProvider>);
+    await waitFor(() => expect(openGate).toBeDefined());
+    expect(loadProtectedPosConfig).not.toHaveBeenCalled();
+    openGate?.({ data: { enabled: true, canBypass: false, canManage: false, updatedAt: null } });
+    expect(await screen.findByText("Authenticated home")).toBeInTheDocument();
+    expect(loadProtectedPosConfig).toHaveBeenCalledTimes(1);
   });
 
   it("ignores an in-flight response after sign-out", async () => {

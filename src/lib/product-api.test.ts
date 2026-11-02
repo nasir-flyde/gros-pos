@@ -1,4 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+
+import { posMaintenanceAccess } from "./pos-maintenance";
+import { clearCatalogCache } from "./catalog-cache";
+
+beforeEach(() =>
+  posMaintenanceAccess.applySavedStatus({
+    enabled: true,
+    canBypass: false,
+    canManage: false,
+    updatedAt: null,
+  }),
+);
 
 import { api } from "./api";
 
@@ -14,6 +26,7 @@ import {
 } from "./product-api";
 
 afterEach(() => {
+  posMaintenanceAccess.reset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -320,5 +333,42 @@ describe("getVariantStockStatus", () => {
   it("keeps legacy bands during a rolling backend deployment", () => {
     expect(getVariantStockStatus({ quantityAvailable: 8 })).toBe("CRITICAL");
     expect(getVariantStockStatus({ quantityAvailable: 15 })).toBe("LOW");
+  });
+});
+
+describe("catalog pause enforcement", () => {
+  it("does not return offline cache or call shared fallbacks for POS_PAUSED", async () => {
+    const data = { categories: [], variants: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: "POS_PAUSED" }), { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await productApi.getJoinedCatalog({ storeId: "pause-store", organizationId: "pause-org" });
+    const get = vi.spyOn(api, "get");
+    await expect(
+      productApi.getJoinedCatalog({ storeId: "pause-store", organizationId: "pause-org" }),
+    ).rejects.toMatchObject({ code: "POS_PAUSED" });
+    expect(get).not.toHaveBeenCalled();
+    expect(posMaintenanceAccess.canUsePos()).toBe(false);
+    await clearCatalogCache();
+  });
+  it("aborts a direct catalog request on pause without returning cached data", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url, config) =>
+          new Promise((_resolve, reject) => {
+            signal = config.signal;
+            signal?.addEventListener("abort", () => reject(new Error("fixture abort")));
+          }),
+      ),
+    );
+    const work = productApi.getJoinedCatalog({ storeId: "abort-store" });
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    posMaintenanceAccess.receivePausedResponse();
+    await expect(work).rejects.toThrow("fixture abort");
+    expect(signal?.aborted).toBe(true);
   });
 });

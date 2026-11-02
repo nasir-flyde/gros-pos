@@ -48,14 +48,14 @@ const PRINT_STYLES = `
     }
 
     #${PRINT_ROOT_ID} [data-receipt-print-content] {
-      width: 72mm !important;
-      max-width: 72mm !important;
+      width: 80mm !important;
+      max-width: 80mm !important;
       padding: 2mm 4mm !important;
       margin: 0 !important;
       border: none !important;
       border-radius: 0 !important;
       box-shadow: none !important;
-      font-family: Arial, Helvetica, sans-serif !important;
+      font-family: 'Courier New', Courier, monospace !important;
       font-size: 11px !important;
       font-weight: 600 !important;
       line-height: 1.35 !important;
@@ -180,7 +180,12 @@ export async function printReceiptHtml(receiptHtml: string): Promise<boolean> {
     }
 
     if (!wrapper.querySelector("[data-receipt-print-content]")) {
-      wrapper.setAttribute("data-receipt-print-content", "");
+      const receiptElement = wrapper.querySelector<HTMLElement>(".receipt");
+      if (receiptElement) {
+        receiptElement.setAttribute("data-receipt-print-content", "");
+      } else {
+        wrapper.setAttribute("data-receipt-print-content", "");
+      }
     }
 
     container.appendChild(wrapper);

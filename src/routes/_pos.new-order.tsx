@@ -18,7 +18,12 @@ import { InventoryRefreshNotice } from "@/components/inventory-refresh-notice";
 import { getErrorMessage, resolvePosPageState } from "@/lib/pos-page-state";
 import { Search, ScanLine, Mic, Plus, Minus, X, Bike, Package } from "lucide-react";
 import { toast } from "sonner";
-import { getMarkdownErrorMessage, isMarkdownCode, markdownApi } from "@/lib/markdown-api";
+import {
+  getMarkdownErrorMessage,
+  isMarkdownCode,
+  markdownApi,
+  type MarkdownLabelResolution,
+} from "@/lib/markdown-api";
 import { buildMarkdownCartProduct } from "@/lib/scanner-flow";
 
 export const Route = createFileRoute("/_pos/new-order")({
@@ -49,6 +54,38 @@ function getCategoryColor(idx: number) {
   return CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
 }
 
+function regularCartProduct(
+  variant: PosJoinedVariant,
+  markdownOption?: MarkdownLabelResolution,
+): CartProduct {
+  return {
+    _id: variant._id,
+    name: variant.variantName,
+    weight:
+      variant.sellingMode === "WEIGHT"
+        ? "Sold by weight"
+        : `${variant.unitValue} ${variant.unitType}`,
+    mrp: variant.mrp || variant.price,
+    price: variant.price,
+    imageUrl: variant.imageUrl,
+    taxRate: variant.taxRate ?? 0,
+    quantityAvailable: variant.quantityAvailable,
+    markdownOption,
+    sellingMode: variant.sellingMode,
+    unitType: variant.unitType,
+    unitValue: Number(variant.unitValue || 0) || undefined,
+  };
+}
+
+async function findMarkdownOption(storeId: string, variant: PosJoinedVariant) {
+  const barcodes = [...new Set([...variant.barcodes, variant.sku].filter(Boolean))];
+  for (const barcode of barcodes) {
+    const response = await markdownApi.resolveBaseEan(storeId, barcode);
+    if (response.data) return response.data;
+  }
+  return null;
+}
+
 function NewOrderPage() {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -59,23 +96,45 @@ function NewOrderPage() {
 
   const resolveHardwareScan = async () => {
     const code = query.trim().toUpperCase();
-    if (!isMarkdownCode(code)) return;
-    if (activeOrderId) {
-      toast.error("Markdown stock cannot be added to a resumed held order.");
-      return;
-    }
+    if (code.length < 6) return;
     try {
-      const markdown = (await markdownApi.resolveLabel(storeId, code)).data;
-      const variants = await productApi.getStoreVariantStock([markdown.productVariantId], storeId);
-      if (!variants[0]) throw new Error("The product for this markdown label is unavailable.");
-      if (variants[0].sellingMode === "WEIGHT") {
-        throw new Error("Markdown labels for manually weighed products are not supported yet.");
+      if (isMarkdownCode(code)) {
+        if (activeOrderId) {
+          toast.error("Markdown stock cannot be added to a resumed held order.");
+          return;
+        }
+        const markdown = (await markdownApi.resolveLabel(storeId, code)).data;
+        const resolvedVariants = await productApi.getStoreVariantStock(
+          [markdown.productVariantId],
+          storeId,
+        );
+        if (!resolvedVariants[0])
+          throw new Error("The product for this markdown label is unavailable.");
+        if (resolvedVariants[0].sellingMode === "WEIGHT") {
+          throw new Error("Markdown labels for manually weighed products are not supported yet.");
+        }
+        if (!add(buildMarkdownCartProduct(resolvedVariants[0], markdown))) {
+          throw new Error(`Only ${markdown.remainingQuantity} markdown units remain.`);
+        }
+        setQuery("");
+        toast.success(`Markdown applied to ${resolvedVariants[0].variantName}`);
+        return;
       }
-      if (!add(buildMarkdownCartProduct(variants[0], markdown))) {
-        throw new Error(`Only ${markdown.remainingQuantity} markdown units remain.`);
+
+      const exactVariant = variants.find((variant) =>
+        variant.barcodes.some((barcode) => barcode.toUpperCase() === code),
+      );
+      if (!exactVariant) return;
+      const markdown = (await markdownApi.resolveBaseEan(storeId, code)).data;
+      if (!add(regularCartProduct(exactVariant, markdown ?? undefined))) {
+        throw new Error(`Only ${exactVariant.quantityAvailable ?? 0} units are available.`);
       }
       setQuery("");
-      toast.success(`Markdown applied to ${variants[0].variantName}`);
+      toast.success(
+        markdown
+          ? `${exactVariant.variantName} added — markdown price available in cart`
+          : `Added ${exactVariant.variantName} at regular price`,
+      );
     } catch (error) {
       toast.error(getMarkdownErrorMessage(error));
     }
@@ -134,7 +193,7 @@ function NewOrderPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && isMarkdownCode(query)) {
+                  if (event.key === "Enter" && query.trim().length >= 6) {
                     event.preventDefault();
                     void resolveHardwareScan();
                   }
@@ -335,9 +394,12 @@ function CategoryTile({
 
 function ProductCard({ variant }: { variant: PosJoinedVariant }) {
   const { add, items } = useCart();
+  const scopes = useAuthStore((state) => state.scopes);
+  const storeId = scopes.find((scope) => scope.type === "store")?.id ?? "";
   const inCart = items.find((i) => i.product._id === variant._id);
   const [imgError, setImgError] = useState(false);
   const [weightDialogOpen, setWeightDialogOpen] = useState(false);
+  const [checkingMarkdown, setCheckingMarkdown] = useState(false);
   const isWeighted = variant.sellingMode === "WEIGHT";
   const outOfStock = variant.quantityAvailable !== undefined && variant.quantityAvailable <= 0;
   const atStockLimit =
@@ -363,7 +425,7 @@ function ProductCard({ variant }: { variant: PosJoinedVariant }) {
     unitValue: Number(variant.unitValue || 0) || undefined,
   };
 
-  const addToCart = () => {
+  const addToCart = async () => {
     if (outOfStock) {
       toast.error("Product is out of stock.");
       return;
@@ -376,8 +438,23 @@ function ProductCard({ variant }: { variant: PosJoinedVariant }) {
       setWeightDialogOpen(true);
       return;
     }
-    if (!add(cartProduct)) {
-      toast.error(`Only ${variant.quantityAvailable ?? 0} available.`);
+
+    setCheckingMarkdown(true);
+    try {
+      const markdownOption = await findMarkdownOption(storeId, variant);
+      if (!add({ ...cartProduct, markdownOption: markdownOption ?? undefined })) {
+        toast.error(`Only ${variant.quantityAvailable ?? 0} available.`);
+        return;
+      }
+      if (markdownOption) {
+        toast.success(`${variant.variantName} added — markdown price available in cart`);
+      }
+    } catch {
+      if (add(cartProduct)) {
+        toast.warning("Added at regular price; markdown price could not be checked.");
+      }
+    } finally {
+      setCheckingMarkdown(false);
     }
   };
 
@@ -385,11 +462,11 @@ function ProductCard({ variant }: { variant: PosJoinedVariant }) {
     <>
       <button
         onClick={addToCart}
-        disabled={outOfStock || atStockLimit}
+        disabled={outOfStock || atStockLimit || checkingMarkdown}
         aria-label={`Add ${variant.variantName}`}
         className={
           "group relative flex flex-col overflow-hidden rounded-2xl border-2 bg-card p-3 text-left shadow-sm transition-all " +
-          (outOfStock || atStockLimit
+          (outOfStock || atStockLimit || checkingMarkdown
             ? "cursor-not-allowed border-muted opacity-50"
             : "border-border active:scale-[0.98] active:border-[var(--brand-blue)]")
         }
@@ -407,6 +484,11 @@ function ProductCard({ variant }: { variant: PosJoinedVariant }) {
         {atStockLimit && !outOfStock && (
           <span className="absolute left-2 top-2 z-10 rounded-md bg-muted-foreground px-1.5 py-0.5 text-[10px] font-extrabold text-white">
             MAX IN CART
+          </span>
+        )}
+        {checkingMarkdown && (
+          <span className="absolute left-2 top-2 z-10 rounded-md bg-[var(--brand-orange)] px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+            CHECKING MARKDOWN
           </span>
         )}
         {inCart && !outOfStock && (
@@ -451,7 +533,7 @@ function ProductCard({ variant }: { variant: PosJoinedVariant }) {
               </div>
             )}
           </div>
-          {!outOfStock && !atStockLimit && (
+          {!outOfStock && !atStockLimit && !checkingMarkdown && (
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-blue)] text-white shadow-sm">
               <Plus className="h-5 w-5" strokeWidth={3} />
             </div>

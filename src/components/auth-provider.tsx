@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
@@ -13,6 +13,10 @@ import {
   loadPublicPosConfig,
   usePosConfig,
 } from "@/lib/pos-config";
+import { isPosAccessError, posMaintenanceAccess } from "@/lib/pos-maintenance";
+import { clearCatalogCache } from "@/lib/catalog-cache";
+import { setPosSessionOwner } from "@/lib/pos-transaction-guard";
+import { PosMaintenanceGate } from "./pos-maintenance-gate";
 
 interface AccessResponse {
   data?: {
@@ -132,17 +136,36 @@ function toAuthFailure(error: unknown): AuthFailure {
   };
 }
 
+// Protected config uses the maintenance-gated client, so it can only load once the gate opens.
+function ProtectedConfigBoundary({ children }: { children: React.ReactNode }) {
+  const setError = useAuthStore((state) => state.setError);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        await loadProtectedPosConfig();
+        if (active) setLoaded(true);
+      } catch (caught) {
+        if (!active || isPosAccessError(caught)) return;
+        console.error("[AuthProvider] Failed to load POS configuration:", caught);
+        setError(toAuthFailure(caught));
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [setError]);
+
+  return loaded ? <>{children}</> : <LoadingScreen />;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const {
-    isLoaded,
-    isSignedIn,
-    getToken,
-    signOut,
-    orgId,
-    userId: clerkUserId,
-    sessionId,
-  } = useAuth();
+  const { isLoaded, isSignedIn, getToken, signOut, orgId, userId, sessionId } = useAuth();
   const queryClient = useQueryClient();
+  const [attemptedSession, setAttemptedSession] = useState<string | null>(null);
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const status = useAuthStore((state) => state.status);
@@ -152,9 +175,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setGrosAccess = useAuthStore((state) => state.setGrosAccess);
   const setError = useAuthStore((state) => state.setError);
   const clearGrosAccess = useAuthStore((state) => state.clearGrosAccess);
-  const identity = JSON.stringify([orgId, clerkUserId, sessionId]);
+  const identity = JSON.stringify([orgId, userId, sessionId]);
+  const sessionKey = sessionId || userId ? identity : null;
   const resolvedIdentityRef = useRef<string | null>(null);
   const requestIdRef = useRef(0);
+  const accessController = useRef<AbortController | null>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
@@ -162,31 +187,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setClerkTokenGetter(null);
   }, [getToken]);
 
-  useEffect(() => {
-    requestIdRef.current += 1;
-    inFlightRef.current = null;
-    clearGrosAccess();
-    clearProtectedPosConfig();
-    queryClient.clear();
-    void loadPublicPosConfig();
-    return () => {
-      requestIdRef.current += 1;
-      inFlightRef.current = null;
-      clearProtectedPosConfig();
-    };
-  }, [orgId, clerkUserId, sessionId, clearGrosAccess, queryClient]);
-
   const refreshAccess = useCallback(() => {
-    if (!isLoaded || !isSignedIn) return Promise.resolve();
+    if (!isLoaded || !isSignedIn || !sessionKey) return Promise.resolve();
     if (inFlightRef.current) return inFlightRef.current;
 
     const requestId = ++requestIdRef.current;
+    setAttemptedSession(sessionKey);
     setLoading();
+    posMaintenanceAccess.reset();
+    const controller = new AbortController();
+    accessController.current = controller;
 
     const request = (async () => {
       try {
-        const response = (await api.get("/auth/me")) as AccessResponse;
-        if (requestId !== requestIdRef.current) return;
+        const response = (await api.get("/auth/me", {
+          signal: controller.signal,
+          timeout: 10_000,
+        })) as AccessResponse;
+        if (requestId !== requestIdRef.current || controller.signal.aborted) return;
 
         const { user: accessUser, permissions, scopes, clerkOrganizationId } = response?.data ?? {};
         const userId = accessUser?._id ?? accessUser?.id ?? "";
@@ -209,9 +227,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           scopes: scopes ?? [],
           clerkOrganizationId: clerkOrganizationId ?? null,
         });
-        await loadProtectedPosConfig();
       } catch (caught) {
-        if (requestId !== requestIdRef.current) return;
+        if (requestId !== requestIdRef.current || controller.signal.aborted) return;
         console.error("[AuthProvider] Failed to load POS access:", caught);
         setError(toAuthFailure(caught));
       } finally {
@@ -221,21 +238,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     inFlightRef.current = request;
     return request;
-  }, [isLoaded, isSignedIn, setError, setGrosAccess, setLoading, identity]);
+  }, [isLoaded, isSignedIn, identity, sessionKey, setError, setGrosAccess, setLoading]);
 
   useEffect(() => {
-    if (isLoaded && isSignedIn && status === "unresolved") void refreshAccess();
-  }, [isLoaded, isSignedIn, refreshAccess, status]);
-
-  useEffect(() => {
-    if (!isLoaded || isSignedIn) return;
     requestIdRef.current += 1;
+    accessController.current?.abort();
     inFlightRef.current = null;
+    posMaintenanceAccess.reset();
+    void queryClient.cancelQueries();
+    queryClient.clear();
+    void clearCatalogCache();
     clearGrosAccess();
     clearProtectedPosConfig();
-    queryClient.clear();
     void loadPublicPosConfig();
-  }, [clearGrosAccess, isLoaded, isSignedIn, queryClient]);
+    setAttemptedSession(null);
+    setPosSessionOwner(isLoaded && isSignedIn ? (userId ?? sessionKey) : null);
+    if (isLoaded && isSignedIn && sessionKey) void refreshAccess();
+    return () => {
+      requestIdRef.current += 1;
+      accessController.current?.abort();
+      inFlightRef.current = null;
+      posMaintenanceAccess.reset();
+      clearProtectedPosConfig();
+    };
+  }, [clearGrosAccess, isLoaded, isSignedIn, sessionKey, userId, queryClient, refreshAccess]);
+
+  const handleSignOut = () => {
+    posMaintenanceAccess.reset();
+    queryClient.clear();
+    clearGrosAccess();
+    clearProtectedPosConfig();
+    void signOut();
+  };
 
   useEffect(() => {
     const isLoginPath = pathname === "/login";
@@ -261,18 +295,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (!isSignedIn) return pathname === "/login" ? <>{children}</> : <LoadingScreen />;
   if (pathname === "/login") return <LoadingScreen />;
 
+  if (attemptedSession !== sessionKey) return <LoadingScreen />;
+
   if (status === "error" && error) {
     return (
-      <ErrorScreen
-        failure={error}
-        onRetry={() => void refreshAccess()}
-        onSignOut={() => void signOut()}
-      />
+      <ErrorScreen failure={error} onRetry={() => void refreshAccess()} onSignOut={handleSignOut} />
     );
   }
 
   if (status !== "ready" || resolvedIdentityRef.current !== identity) return <LoadingScreen />;
   if (user?.mustChangePassword && pathname !== "/change-password") return <LoadingScreen />;
 
-  return <AuthAccessContext.Provider value={accessContext}>{children}</AuthAccessContext.Provider>;
+  return (
+    <AuthAccessContext.Provider value={accessContext}>
+      <PosMaintenanceGate key={sessionKey} onSignOut={handleSignOut}>
+        <ProtectedConfigBoundary>{children}</ProtectedConfigBoundary>
+      </PosMaintenanceGate>
+    </AuthAccessContext.Provider>
+  );
 }
